@@ -671,8 +671,8 @@ function drawPoseOnCanvas(ctx, lms, W, H) {
   if (overlayState.lines && lms[11] && lms[12] && lms[23] && lms[24]) {
     const ls=lmPx(lms,11,W,H), rs=lmPx(lms,12,W,H);
     const lh=lmPx(lms,23,W,H), rh=lmPx(lms,24,W,H);
-    const midS={(x:(ls.x+rs.x)/2,y:(ls.y+rs.y)/2)};
-    const midH={(x:(lh.x+rh.x)/2,y:(lh.y+rh.y)/2)};
+    const midS={x:(ls.x+rs.x)/2,y:(ls.y+rs.y)/2};
+    const midH={x:(lh.x+rh.x)/2,y:(lh.y+rh.y)/2};
     ctx.strokeStyle='rgba(251,191,36,0.7)'; ctx.lineWidth=Math.max(1.5,W*0.003);
     ctx.setLineDash([5,4]);
     ctx.beginPath(); ctx.moveTo(midS.x,midS.y); ctx.lineTo(midH.x,midH.y); ctx.stroke();
