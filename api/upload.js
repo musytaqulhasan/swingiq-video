@@ -12,12 +12,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-  const API_KEY    = process.env.CLOUDINARY_API_KEY;
-  const API_SECRET = process.env.CLOUDINARY_API_SECRET;
-
-  if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
-    return res.status(500).json({ error: 'Cloudinary env vars not configured' });
-  }
+  if (!CLOUD_NAME) return res.status(500).json({ error: 'CLOUDINARY_CLOUD_NAME not configured' });
 
   try {
     const form = new IncomingForm({ maxFileSize: 100 * 1024 * 1024 });
@@ -25,23 +20,14 @@ export default async function handler(req, res) {
     const file = Array.isArray(files.video) ? files.video[0] : files.video;
     if (!file) return res.status(400).json({ error: 'No video file received' });
 
-    const timestamp = Math.floor(Date.now() / 1000);
-    const folder = 'swingiq';
-
-    const crypto = await import('crypto');
-    const strToSign = `folder=${folder}&timestamp=${timestamp}${API_SECRET}`;
-    const signature = crypto.createHash('sha256').update(strToSign).digest('hex');
-
+    // Unsigned upload — uses upload preset, no signature needed
     const form2 = new FormData();
     form2.append('file', createReadStream(file.filepath), {
       filename: file.originalFilename || 'video.mp4',
       contentType: file.mimetype || 'video/mp4',
     });
-    form2.append('api_key', API_KEY);
-    form2.append('timestamp', String(timestamp));
-    form2.append('signature', signature);
-    form2.append('folder', folder);
-    form2.append('resource_type', 'video');
+    form2.append('upload_preset', 'swingiq_videos');
+    form2.append('folder', 'swingiq');
 
     const uploadRes = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`,
