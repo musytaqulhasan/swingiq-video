@@ -685,6 +685,22 @@ function drawPoseOnCanvas(ctx, lms, W, H) {
 }
 
 // --- Live overlay on video ---
+function updateActivePhase(currentTime) {
+  if (!analysisData?.phases) return;
+  const segs = document.querySelectorAll('.phase-seg');
+  analysisData.phases.forEach((p, i) => {
+    const seg = segs[i]; if (!seg) return;
+    const start = p.timestamp || 0;
+    const next = analysisData.phases[i+1];
+    const end = next ? (next.timestamp || Infinity) : Infinity;
+    if (currentTime >= start && currentTime < end) {
+      seg.classList.add('active');
+      const el = document.getElementById('phaseInfo');
+      if(el) el.textContent = `${p.position||''} ${p.name} · Skor ${p.score}`;
+    } else { seg.classList.remove('active'); }
+  });
+}
+
 function drawLiveOverlay(currentTime) {
   if (!analysisData) return;
   const vid = document.getElementById('videoPlayer');
