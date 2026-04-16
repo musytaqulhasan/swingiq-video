@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwingIQ Video — AI Golf Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f9fafb;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--accent:#2563eb;--green:#16a34a;--red:#dc2626;--blue:#2563eb;--green-bg:#dcfce7;--red-bg:#fee2e2;--blue-bg:#eff6ff;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
+  header{background:white;border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+  .logo{font-size:18px;font-weight:600;}.logo span{color:var(--accent);}
+  .badge{font-size:11px;background:var(--accent);color:white;padding:3px 10px;border-radius:20px;}
+  .main{max-width:1100px;margin:0 auto;padding:20px;display:grid;grid-template-columns:1fr 360px;gap:18px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+  .card-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .card-title{font-size:13px;font-weight:500;}
+  .card-body{padding:14px 16px;}
+  .upload-zone{border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;}
+  .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:#eff6ff;}
+  .btn{padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:white;color:var(--text);transition:all .15s;font-family:inherit;}
+  .btn:hover:not(:disabled){background:var(--bg);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn.primary{background:var(--accent);color:white;border-color:var(--accent);}
+  .btn.primary:hover:not(:disabled){background:#1d4ed8;}
+  .btn.w-full{width:100%;}
+  .status{padding:8px 12px;border-radius:8px;font-size:12px;background:var(--bg);color:var(--muted);}
+  .status.ok{background:var(--green-bg);color:var(--green);}
+  .status.err{background:var(--red-bg);color:var(--red);}
+  .status.run{background:#fef3c7;color:#d97706;}
+
+  /* Video player */
+  .player-wrap{position:relative;background:#0a0a0a;border-radius:10px;overflow:hidden;}
+  .player-wrap video{width:100%;display:block;max-height:320px;object-fit:contain;}
+  .overlay-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+  .overlay-controls{display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(0,0,0,0.6);}
+  .tog{font-size:10px;padding:3px 8px;border-radius:10px;border:none;cursor:pointer;font-weight:500;font-family:inherit;}
+  .tog.on{background:#2563eb;color:white;}
+  .tog.off{background:rgba(255,255,255,0.15);color:rgba(255,255,255,0.6);}
+  .vid-controls{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(0,0,0,0.7);}
+  .play-btn{width:28px;height:28px;border-radius:50%;background:white;border:none;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .progress{flex:1;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;cursor:pointer;}
+  .progress-fill{height:100%;background:#2563eb;border-radius:2px;width:0%;}
+  .time-disp{font-size:10px;color:rgba(255,255,255,0.6);min-width:64px;text-align:right;}
+
+  /* Phase timeline */
+  .phase-bar{display:flex;height:22px;border-radius:4px;overflow:hidden;gap:1px;margin-top:6px;}
+  .phase-seg{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;color:white;cursor:pointer;transition:opacity .15s;min-width:24px;}
+  .phase-seg:hover{opacity:.75;}
+  .phase-seg.active{outline:2px solid white;z-index:1;outline-offset:-1px;}
+  .phase-info{font-size:10px;color:rgba(255,255,255,0.5);padding:4px 0 6px;text-align:center;}
+
+  /* Score & angles */
+  .score-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;}
+  .score-card{background:var(--bg);border-radius:8px;padding:8px;text-align:center;border-left:3px solid;}
+  .score-card.red{border-left-color:#dc2626;}
+  .score-card.blue{border-left-color:#2563eb;}
+  .score-card.green{border-left-color:#16a34a;}
+  .sc-name{font-size:10px;color:var(--muted);margin-bottom:2px;}
+  .sc-val{font-size:20px;font-weight:600;}
+  .sc-note{font-size:9px;color:var(--muted);margin-top:2px;line-height:1.2;}
+  .range-track{height:4px;border-radius:2px;margin-top:5px;background:linear-gradient(to right,#dc2626 0%,#dc2626 69%,#2563eb 69%,#2563eb 89%,#16a34a 89%,#16a34a 100%);position:relative;}
+  .range-marker{position:absolute;top:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:white;border:2px solid #374151;}
+
+  .angle-item{background:var(--bg);border-radius:8px;overflow:hidden;margin-bottom:6px;}
+  .angle-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;gap:8px;}
+  .angle-phase{font-size:10px;padding:2px 6px;border-radius:8px;background:white;border:1px solid var(--border);color:var(--muted);flex-shrink:0;}
+  .angle-detail{padding:8px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);line-height:1.6;display:none;}
+  .angle-detail.open{display:block;}
+  .show-more{text-align:center;padding:7px;font-size:12px;color:var(--accent);cursor:pointer;border-top:1px solid var(--border);}
+  .pill{font-size:10px;font-weight:500;padding:2px 7px;border-radius:8px;}
+  .pill.good{background:var(--green-bg);color:var(--green);}
+  .pill.warn{background:var(--blue-bg);color:var(--blue);}
+  .pill.bad{background:var(--red-bg);color:var(--red);}
+
+  /* Error frames */
+  .err-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .err-card{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:white;}
+  .err-frame{position:relative;background:#111;aspect-ratio:16/9;}
+  .err-frame canvas{width:100%;height:100%;display:block;}
+  .err-ts{position:absolute;bottom:5px;left:8px;background:rgba(0,0,0,0.7);color:white;font-size:9px;padding:2px 6px;border-radius:4px;}
+  .err-badge{position:absolute;top:5px;right:8px;font-size:9px;font-weight:500;padding:2px 7px;border-radius:8px;}
+  .err-badge.bad{background:#dc2626;color:white;}
+  .err-badge.warn{background:#d97706;color:white;}
+  .err-body{padding:10px 12px;}
+  .err-title{font-size:12px;font-weight:500;margin-bottom:4px;}
+  .err-angle{font-size:11px;padding:4px 8px;background:var(--red-bg);color:var(--red);border-radius:6px;display:inline-block;margin-bottom:6px;}
+  .err-desc{font-size:11px;color:var(--muted);line-height:1.55;margin-bottom:8px;}
+  .compare-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .comp{padding:7px;border-radius:6px;font-size:10px;text-align:center;line-height:1.4;}
+  .comp.wrong{background:var(--red-bg);color:#991b1b;}
+  .comp.right{background:var(--green-bg);color:#166534;}
+
+  /* Drill cards */
+  .drill-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .drill-card{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:white;display:flex;flex-direction:column;}
+  .drill-img{width:100%;aspect-ratio:1;object-fit:cover;display:block;}
+  .drill-gen{width:100%;aspect-ratio:1;background:#1e293b;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;}
+  .drill-body{padding:10px 12px;display:flex;flex-direction:column;flex:1;}
+  .drill-num{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;}
+  .drill-title{font-size:12px;font-weight:600;margin-bottom:4px;}
+  .drill-desc{font-size:11px;color:var(--muted);line-height:1.5;flex:1;margin-bottom:6px;}
+  .spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.2);border-top:2px solid white;border-radius:50%;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* Chat */
+  .chat-box{display:flex;flex-direction:column;height:calc(100vh - 80px);min-height:520px;}
+  .chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;}
+  .msg{display:flex;flex-direction:column;gap:3px;}
+  .mlbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+  .msg.user .mlbl{text-align:right;}
+  .bubble{padding:9px 12px;border-radius:10px;font-size:13px;line-height:1.6;}
+  .bubble.ai{background:var(--bg);border-radius:4px 10px 10px 10px;}
+  .bubble.user{background:#eff6ff;color:#1d4ed8;border-radius:10px 10px 4px 10px;margin-left:16px;}
+  .chat-foot{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;}
+  .chat-input{flex:1;resize:none;border:1px solid var(--border);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;outline:none;color:var(--text);}
+  .chat-input:focus{border-color:var(--accent);}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;border-top:1px solid var(--border);}
+  .chip{font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:white;cursor:pointer;color:var(--muted);}
+  .chip:hover{border-color:var(--accent);color:var(--accent);}
+  .dots{display:flex;gap:4px;padding:2px 0;}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:bop 1.1s infinite;}
+  .dot:nth-child(2){animation-delay:.18s;}.dot:nth-child(3){animation-delay:.36s;}
+  @keyframes bop{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-5px);}}
+  .insight{background:#fffbeb;border-left:3px solid #d97706;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.65;}
+
+  @media(max-width:768px){.main{grid-template-columns:1fr;}.score-grid{grid-template-columns:repeat(2,1fr);}.drill-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Swing<span>IQ</span> <span style="font-size:12px;font-weight:400;color:var(--muted);">Video</span></div>
+  <div style="font-size:11px;color:var(--muted);">GPT-4o + MediaPipe + Cloudinary</div>
+  <div class="badge">AI Golf Analyzer</div>
+</header>
+
+<div class="main">
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    <!-- Upload -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Upload Video Swing</span>
+        <button class="btn" id="resetBtn" onclick="resetAll()" style="display:none;font-size:11px;padding:4px 10px;">↩ Reset</button>
+      </div>
+      <div class="card-body">
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+          <div style="font-size:28px;margin-bottom:8px;">🎬</div>
+          <div style="font-size:14px;font-weight:500;margin-bottom:3px;">Upload video swing golf kamu</div>
+          <div style="font-size:12px;color:var(--muted);">Klik atau drag & drop · MP4 / MOV · Max 100MB</div>
+          <input type="file" id="fileInput" accept="video/*" style="display:none" onchange="handleVideoSelect(this.files[0])">
+        </div>
+        <div id="videoInfo" style="display:none;margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted);"></div>
+      </div>
+    </div>
+
+    <!-- Status + Analyze -->
+    <div id="analyzeSection" style="display:none;flex-direction:column;gap:8px;">
+      <div class="status" id="statusBar">Siap dianalisa.</div>
+      <button class="btn primary w-full" id="analyzeBtn" onclick="runFullAnalysis()">🎬 Analisa Video dengan AI</button>
+    </div>
+
+    <!-- Report -->
+    <div id="reportSection" style="display:none;flex-direction:column;gap:14px;">
+
+      <!-- Video player with overlay -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Video + Overlay</span>
+          <div style="display:flex;align-items:baseline;gap:5px;">
+            <span id="overallNum" style="font-size:28px;font-weight:600;color:#dc2626;">–</span>
+            <span style="font-size:11px;color:var(--muted);">/ 100</span>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div class="player-wrap">
+            <video id="videoPlayer" playsinline></video>
+            <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+            <div class="overlay-controls">
+              <button class="tog on" id="togSkeleton" onclick="toggleOverlay('skeleton',this)">Skeleton</button>
+              <button class="tog on" id="togAngles" onclick="toggleOverlay('angles',this)">Sudut</button>
+              <button class="tog on" id="togLines" onclick="toggleOverlay('lines',this)">Garis acuan</button>
+              <button class="tog on" id="togErrors" onclick="toggleOverlay('errors',this)">Error zone</button>
+            </div>
+            <div class="vid-controls">
+              <button class="play-btn" id="playBtn" onclick="togglePlay()">▶</button>
+              <div class="progress" id="progressBar" onclick="seekVideo(event)">
+                <div class="progress-fill" id="progressFill"></div>
+              </div>
+              <div class="time-disp" id="timeDisp">0:00 / 0:00</div>
+            </div>
+            <div style="padding:0 10px 4px;background:rgba(0,0,0,0.5);">
+              <div class="phase-bar" id="phaseBar"></div>
+              <div class="phase-info" id="phaseInfo">Klik fase untuk jump ke momen tersebut</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase scores -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Skor per Fase</span></div>
+        <div class="card-body">
+          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);">
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#dc2626;margin-right:3px;"></span>0–69 Amatir</span>
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#2563eb;margin-right:3px;"></span>70–89 Advance</span>
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#16a34a;margin-right:3px;"></span>90–100 Pro</span>
+          </div>
+          <div class="score-grid" id="scoreGrid"></div>
+        </div>
+      </div>
+
+      <!-- Angles -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Area yang Bisa Ditingkatkan</span></div>
+        <div class="card-body" style="padding-bottom:0;">
+          <div id="angleRows"></div>
+          <div class="show-more" id="showMore" onclick="toggleAngles()">+ Lihat semua</div>
+        </div>
+      </div>
+
+      <!-- Error frames with overlay -->
+      <div class="card" id="errorSection" style="display:none;">
+        <div class="card-header"><span class="card-title">Frame Error — Gerakan Bermasalah</span></div>
+        <div class="card-body">
+          <div class="err-grid" id="errorGrid"></div>
+        </div>
+      </div>
+
+      <!-- Coach insight -->
+      <div class="insight" id="insightBox" style="display:none;"></div>
+
+      <!-- Drill illustrations -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Ilustrasi Drill</span>
+          <span id="drillStatus" style="font-size:11px;color:var(--muted);"></span>
+        </div>
+        <div class="card-body">
+          <div class="drill-grid" id="drillGrid"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Chat -->
+  <div class="card chat-box">
+    <div class="card-header">
+      <span class="card-title">AI Golf Coach</span>
+      <span style="font-size:11px;color:var(--muted);">GPT-4o</span>
+    </div>
+    <div class="chat-msgs" id="chatMsgs">
+      <div class="msg ai"><div class="mlbl">SwingIQ Coach</div>
+      <div class="bubble ai">Halo! Upload video swing golf kamu dan klik Analisa untuk mendapat feedback lengkap dengan overlay. 🎬</div></div>
+    </div>
+    <div class="chips" id="chips" style="display:none;">
+      <div class="chip" onclick="askQ('Fase mana yang paling perlu diperbaiki?')">Prioritas?</div>
+      <div class="chip" onclick="askQ('Jelaskan error di video saya secara detail')">Detail error</div>
+      <div class="chip" onclick="askQ('Drill apa yang paling cocok?')">Rekomendasi drill</div>
+    </div>
+    <div class="chat-foot">
+      <textarea class="chat-input" id="chatInput" placeholder="Tanya tentang swing kamu..." rows="1" disabled
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+      <button class="btn primary" id="sendBtn" onclick="sendChat()" disabled>↑</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
+<script>
+const PROXY = '/api/proxy';
+const UPLOAD = '/api/upload';
+
+let videoFile = null;
+let videoUrl = null;
+let analysisData = null;
+let chatHist = [];
+let showingAll = false;
+let poseInstance = null;
+let frameData = {};
+let overlayState = { skeleton:true, angles:true, lines:true, errors:true };
+let currentPoseResult = null;
+
+const drillDefs = [
+  { num:'Prioritas 1', title:'Elbow Tuck Drill', desc:'Jepit headcover di ketiak kanan saat backswing. 20x sebelum setiap sesi.',
+    prompt:'Minimalist golf swing instruction diagram, pure white background, two clearly separated panels. Male golfer in thin soft gray line art, no heavy fill. LEFT panel GREEN CHECKMARK: right elbow pressed firmly against ribcage, arm hugging torso during backswing. RIGHT panel RED X: right elbow flying dramatically outward at 90 degrees — extremely exaggerated flying elbow. Clean minimal airy line art.' },
+  { num:'Prioritas 2', title:'Shoulder Turn Drill', desc:'Silangkan tangan di dada, putar hingga punggung menghadap target (90°). 30x/hari.',
+    prompt:'Minimalist golf swing instruction diagram, pure white background, two clearly separated panels. Male golfer in thin soft gray line art. LEFT panel GREEN CHECKMARK: full 90-degree shoulder rotation, back completely facing target, dotted arc labeled 90°. RIGHT panel RED X: barely any shoulder turn at 25 degrees — extremely exaggerated minimal rotation. Degree labels (90° vs 25°).' },
+  { num:'Prioritas 3', title:'Hip Bump Drill', desc:'Geser pinggul kiri ke target sebelum tangan turun di downswing.',
+    prompt:'Minimalist golf swing instruction diagram, pure white background, two clearly separated panels. Male golfer in thin soft gray line art. LEFT panel GREEN CHECKMARK: hips shifted toward target, lower body leading, bold arrow showing lateral hip shift. RIGHT panel RED X: arms thrown dramatically over-the-top, steep outside-in path, hips square — greatly exaggerated wrong movement.' },
+];
+
+function scoreColor(s){ return s>=90?'#16a34a':s>=70?'#2563eb':'#dc2626'; }
+function scoreClass(s){ return s>=90?'green':s>=70?'blue':'red'; }
+function scoreLabel(s){ return s>=90?'Pro':s>=70?'Advance':'Amatir'; }
+function fmtTime(s){ const m=Math.floor(s/60),sec=Math.floor(s%60); return `${m}:${sec.toString().padStart(2,'0')}`; }
+function setStatus(msg,type=''){ const el=document.getElementById('statusBar');if(!el)return;el.textContent=msg;el.className='status'+(type?' '+type:''); }
+function addMsg(role,html){ const cm=document.getElementById('chatMsgs');const d=document.createElement('div');d.className=`msg ${role}`;d.innerHTML=`<div class="mlbl">${role==='user'?'Kamu':'SwingIQ Coach'}</div><div class="bubble ${role}">${html}</div>`;cm.appendChild(d);cm.scrollTop=cm.scrollHeight;return d; }
+function addTyping(){ const d=addMsg('ai','<div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>');d.id='ty'+Date.now();return d.id; }
+function removeTyping(id){ const el=document.getElementById(id);if(el)el.remove(); }
+
+// --- Upload handling ---
+const uploadZone = document.getElementById('uploadZone');
+uploadZone.addEventListener('dragover', e=>{ e.preventDefault(); uploadZone.classList.add('drag'); });
+uploadZone.addEventListener('dragleave', ()=>uploadZone.classList.remove('drag'));
+uploadZone.addEventListener('drop', e=>{ e.preventDefault(); uploadZone.classList.remove('drag'); if(e.dataTransfer.files[0]) handleVideoSelect(e.dataTransfer.files[0]); });
+
+function handleVideoSelect(file) {
+  if (!file || !file.type.startsWith('video/')) { alert('Pilih file video (MP4/MOV)'); return; }
+  if (file.size > 100*1024*1024) { alert('File terlalu besar. Maksimal 100MB.'); return; }
+  videoFile = file;
+  const info = document.getElementById('videoInfo');
+  info.style.display = 'block';
+  info.textContent = `📹 ${file.name} · ${(file.size/1024/1024).toFixed(1)}MB · Siap dianalisa`;
+  document.getElementById('analyzeSection').style.display = 'flex';
+  document.getElementById('resetBtn').style.display = 'block';
+  document.getElementById('chatInput').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+  setStatus('Video dipilih. Klik Analisa untuk memulai.');
+}
+
+// --- Main analysis pipeline ---
+async function runFullAnalysis() {
+  if (!videoFile) return;
+  document.getElementById('analyzeBtn').disabled = true;
+  addMsg('user', `Analisa video swing saya: ${videoFile.name}`);
+
+  try {
+    // Step 1: Upload to Cloudinary
+    setStatus('Mengupload video ke cloud...', 'run');
+    const uploadedUrl = await uploadToCloudinary(videoFile);
+    videoUrl = uploadedUrl;
+
+    // Step 2: Load video in player
+    const localUrl = URL.createObjectURL(videoFile);
+    loadVideoPlayer(localUrl);
+
+    // Wait for video metadata to load
+    await new Promise(resolve => {
+      const vid = document.getElementById('videoPlayer');
+      if (vid.readyState >= 1) { resolve(); return; }
+      vid.onloadedmetadata = resolve;
+    });
+
+    // Step 3: Extract 30 frames evenly for detection
+    setStatus('Mengextract 30 frame untuk deteksi posisi P1–P10...', 'run');
+    const vid = document.getElementById('videoPlayer');
+    const allFrames = await extractFrames(vid, 30);
+    addMsg('ai', `30 frame berhasil diextract dari video ${fmtTime(vid.duration||0)}.`);
+
+    // Step 4: AI detect which frames are P1-P10
+    setStatus('AI mendeteksi posisi P1–P10...', 'run');
+    const detectRes = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'detect', frames: allFrames })
+    });
+    const detectData = await detectRes.json();
+    if (detectData.error) throw new Error(detectData.error);
+    const positions = detectData.positions;
+    addMsg('ai', `Posisi P1–P10 terdeteksi! Mengambil frame resolusi tinggi...`);
+
+    // Step 5: Re-extract selected 10 frames at high quality
+    setStatus('Mengambil 10 frame P1–P10 resolusi tinggi...', 'run');
+    const selectedFrames = [];
+    for (const p of positions) {
+      // Clamp frame_index to valid range
+      const safeIdx = Math.min(Math.max(0, p.frame_index || 0), allFrames.length - 1);
+      const frame = allFrames[safeIdx];
+      if (!frame) continue;
+      const hqFrame = await extractFrameAt(vid, frame.timestamp);
+      selectedFrames.push({ ...hqFrame, position: p.position, posName: p.name, frame_index: selectedFrames.length });
+    }
+    // Safety: if selectedFrames empty, use allFrames spread evenly
+    if (selectedFrames.length === 0) {
+      const step = Math.floor(allFrames.length / 10);
+      for (let i = 0; i < 10; i++) {
+        const frame = allFrames[Math.min(i * step, allFrames.length - 1)];
+        const positions_p = ['P1','P2','P3','P4','P5','P6','P7','P8','P9','P10'];
+        const names_p = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
+        selectedFrames.push({ ...frame, position: positions_p[i], posName: names_p[i], frame_index: i });
+      }
+    }
+
+    // Step 6: Full analysis of 10 frames
+    setStatus('Menganalisa 10 posisi swing P1–P10...', 'run');
+    const tid = addTyping();
+    const analyzeRes = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'analyze', frames: selectedFrames, positions })
+    });
+    const analyzeData = await analyzeRes.json();
+    if (analyzeData.error) throw new Error(analyzeData.error);
+    analysisData = analyzeData.result;
+    analysisData._selectedFrames = selectedFrames;
+    removeTyping(tid);
+
+    // Step 7: Render report
+    renderReport(analysisData);
+
+    // Step 8: MediaPipe overlay on error frames
+    setStatus('Mendeteksi pose di frame bermasalah...', 'run');
+    await extractAndAnalyzeErrorFrames(analysisData);
+
+    // Step 9: Generate drill illustrations
+    setStatus('Generating ilustrasi drill...', 'run');
+    await generateDrills();
+
+    chatHist = [
+      { role:'user', content:'Analisa video swing saya P1-P10.' },
+      { role:'assistant', content: JSON.stringify(analysisData) }
+    ];
+    document.getElementById('chips').style.display = 'flex';
+    setStatus('Analisa P1–P10 selesai!', 'ok');
+
+  } catch(e) {
+    setStatus('Error: ' + e.message, 'err');
+    addMsg('ai', 'Terjadi error: ' + e.message);
+    console.error(e);
+  }
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+// --- Step 1: Upload to Cloudinary ---
+async function uploadToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('video', file);
+  const res = await fetch(UPLOAD, { method:'POST', body:formData });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
+  addMsg('ai', `Video tersimpan di cloud. URL: <a href="${data.url}" target="_blank" style="color:var(--accent);">lihat video</a>`);
+  return data.url;
+}
+
+// --- Step 2: Load video player ---
+function loadVideoPlayer(src) {
+  const vid = document.getElementById('videoPlayer');
+  vid.src = src;
+  vid.ontimeupdate = updateVideoProgress;
+  vid.onended = () => document.getElementById('playBtn').textContent = '▶';
+}
+
+function togglePlay() {
+  const vid = document.getElementById('videoPlayer');
+  const btn = document.getElementById('playBtn');
+  if (vid.paused) { vid.play(); btn.textContent = '⏸'; }
+  else { vid.pause(); btn.textContent = '▶'; }
+}
+
+function updateVideoProgress() {
+  const vid = document.getElementById('videoPlayer');
+  const pct = (vid.currentTime / vid.duration) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('timeDisp').textContent = `${fmtTime(vid.currentTime)} / ${fmtTime(vid.duration||0)}`;
+  updateActivePhase(vid.currentTime);
+  if (analysisData) drawLiveOverlay(vid.currentTime);
+}
+
+function seekVideo(e) {
+  const vid = document.getElementById('videoPlayer');
+  const bar = document.getElementById('progressBar');
+  const r = bar.getBoundingClientRect();
+  vid.currentTime = ((e.clientX - r.left) / r.width) * vid.duration;
+}
+
+// --- Step 3: Extract frames + 2-step P1-P10 analysis ---
+
+// Extract N frames evenly from video
+async function extractFrames(videoEl, count) {
+  return new Promise(resolve => {
+    const frames = [];
+    const duration = videoEl.duration || 4;
+    const interval = duration / (count + 1);
+    let captured = 0;
+    const canvas = document.createElement('canvas');
+    canvas.width = 480; canvas.height = 270;
+    const ctx = canvas.getContext('2d');
+
+    function captureAt(time) {
+      videoEl.currentTime = Math.min(time, duration - 0.05);
+      videoEl.onseeked = () => {
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        const base64 = canvas.toDataURL('image/jpeg', 0.65).split(',')[1];
+        frames.push({ base64, timestamp: parseFloat(time.toFixed(3)) });
+        captured++;
+        if (captured < count) {
+          captureAt(interval * (captured + 1));
+        } else {
+          resolve(frames);
+        }
+      };
+    }
+    captureAt(interval);
+  });
+}
+
+// Extract exactly 1 frame at specific timestamp (high quality for analysis)
+async function extractFrameAt(videoEl, timestamp) {
+  return new Promise(resolve => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640; canvas.height = 360;
+    const ctx = canvas.getContext('2d');
+    videoEl.currentTime = timestamp;
+    videoEl.onseeked = () => {
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+      resolve({ base64, timestamp });
+    };
+  });
+}
+
+// analyzeWithGPT4o replaced by runFullAnalysis pipeline
+
+async function extractAndAnalyzeErrorFrames(d) {
+  if (!d.error_frames?.length) return;
+  const vid = document.getElementById('videoPlayer');
+  const errorGrid = document.getElementById('errorGrid');
+  const errorSection = document.getElementById('errorSection');
+  errorGrid.innerHTML = ''; errorSection.style.display = 'block';
+  const selectedFrames = d._selectedFrames || [];
+
+  for (const ef of d.error_frames) {
+    const storedFrame = selectedFrames[ef.frame_index];
+    const canvasId = `ec-${ef.position||ef.frame_index}`;
+    const badgeCls = ef.status === 'bad' ? 'bad' : 'warn';
+    const ts = storedFrame?.timestamp || 0;
+    const card = document.createElement('div'); card.className = 'err-card';
+    card.innerHTML = `<div class="err-frame">
+      <canvas id="${canvasId}" width="320" height="180"></canvas>
+      <div class="err-ts">${ef.position||''} · ${fmtTime(ts)}</div>
+      <div class="err-badge ${badgeCls}">${ef.status==='bad'?'Perlu perhatian':'Bisa dioptimalkan'}</div>
+    </div>
+    <div class="err-body">
+      <div class="err-title">${ef.position ? ef.position+' — ' : ''}${ef.issue}</div>
+      <div class="err-angle">${ef.actual_value} · ideal ${ef.ideal_value}</div>
+      <div class="err-desc">${ef.description}</div>
+      <div class="compare-row">
+        <div class="comp wrong">✗ ${ef.actual_value}<br>posisi saat ini</div>
+        <div class="comp right">✓ ${ef.ideal_value}<br>posisi ideal</div>
+      </div>
+    </div>`;
+    errorGrid.appendChild(card);
+
+    if (storedFrame) {
+      const canvas = document.getElementById(canvasId);
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); };
+        img.src = `data:image/jpeg;base64,${storedFrame.base64}`;
+        // Also run MediaPipe on stored frame
+        try {
+          const pose = await getPoseInstance();
+          pose.onResults(results => {
+            if (results.poseLandmarks) drawPoseOnCanvas(ctx, results.poseLandmarks, canvas.width, canvas.height);
+          });
+          await pose.send({ image: canvas });
+        } catch(e) { console.warn('MediaPipe:', e.message); }
+      }
+    } else if (ts > 0) {
+      await extractFrameWithOverlay(vid, ts, canvasId);
+    }
+  }
+}
+async function extractFrameWithOverlay(vid, timestamp, canvasId) {
+  return new Promise(resolve => {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) { resolve(); return; }
+    const ctx = canvas.getContext('2d');
+    const wasPlaying = !vid.paused;
+    vid.pause();
+    vid.currentTime = timestamp;
+    vid.onseeked = async () => {
+      // Draw video frame
+      ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+
+      // Try MediaPipe pose detection
+      try {
+        const pose = await getPoseInstance();
+        pose.onResults(results => {
+          if (results.poseLandmarks) {
+            drawPoseOnCanvas(ctx, results.poseLandmarks, canvas.width, canvas.height);
+          }
+          if (wasPlaying) vid.play();
+          resolve();
+        });
+        await pose.send({ image: canvas });
+      } catch(e) {
+        console.warn('MediaPipe on frame:', e.message);
+        if (wasPlaying) vid.play();
+        resolve();
+      }
+    };
+  });
+}
+
+async function getPoseInstance() {
+  if (poseInstance) return poseInstance;
+  if (typeof Pose === 'undefined') throw new Error('MediaPipe not loaded');
+  poseInstance = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}` });
+  poseInstance.setOptions({ modelComplexity:1, smoothLandmarks:true, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+  await poseInstance.initialize();
+  return poseInstance;
+}
+
+const CONNECTIONS = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[27,31],[28,32]];
+const KEY_JOINTS  = [11,12,13,14,15,16,23,24,25,26,27,28];
+
+function lmPx(lms, i, W, H) {
+  return { x: lms[i].x * W, y: lms[i].y * H };
+}
+
+function calcAngle3(a, b, c) {
+  const ab={x:a.x-b.x,y:a.y-b.y}, cb={x:c.x-b.x,y:c.y-b.y};
+  const dot=ab.x*cb.x+ab.y*cb.y;
+  const mag=Math.sqrt(ab.x**2+ab.y**2)*Math.sqrt(cb.x**2+cb.y**2);
+  if(!mag) return 0;
+  return Math.round(Math.acos(Math.max(-1,Math.min(1,dot/mag)))*180/Math.PI);
+}
+
+function drawPoseOnCanvas(ctx, lms, W, H) {
+  const lw = Math.max(2, W*0.004);
+
+  // Bones
+  if (overlayState.skeleton) {
+    ctx.lineWidth = lw; ctx.strokeStyle = 'rgba(96,165,250,0.85)';
+    CONNECTIONS.forEach(([i,j]) => {
+      if (!lms[i] || !lms[j]) return;
+      const a=lmPx(lms,i,W,H), b=lmPx(lms,j,W,H);
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    });
+  }
+
+  // Joints
+  if (overlayState.skeleton) {
+    KEY_JOINTS.forEach(i => {
+      if (!lms[i]) return;
+      const p=lmPx(lms,i,W,H), r=Math.max(4,W*0.012);
+      ctx.fillStyle='#4ade80'; ctx.strokeStyle='white'; ctx.lineWidth=Math.max(1.5,W*0.003);
+      ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    });
+  }
+
+  // Reference lines (spine + hip line)
+  if (overlayState.lines && lms[11] && lms[12] && lms[23] && lms[24]) {
+    const ls=lmPx(lms,11,W,H), rs=lmPx(lms,12,W,H);
+    const lh=lmPx(lms,23,W,H), rh=lmPx(lms,24,W,H);
+    const midS={x:(ls.x+rs.x)/2,y:(ls.y+rs.y)/2};
+    const midH={x:(lh.x+rh.x)/2,y:(lh.y+rh.y)/2};
+    ctx.strokeStyle='rgba(251,191,36,0.7)'; ctx.lineWidth=Math.max(1.5,W*0.003);
+    ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(midS.x,midS.y); ctx.lineTo(midH.x,midH.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ls.x,ls.y); ctx.lineTo(rs.x,rs.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Angle labels
+  if (overlayState.angles) {
+    const anglePairs = [
+      { joints:[13,11,23], label:'bahu kiri' },
+      { joints:[14,12,24], label:'bahu kanan' },
+      { joints:[11,13,15], label:'siku kiri' },
+      { joints:[12,14,16], label:'siku kanan' },
+      { joints:[11,23,25], label:'hip kiri' },
+      { joints:[23,25,27], label:'lutut kiri' },
+    ];
+    const fs = Math.max(10, W*0.022);
+    ctx.font = `500 ${fs}px system-ui`;
+    anglePairs.forEach(({ joints:[a,b,c], label }) => {
+      if (!lms[a]||!lms[b]||!lms[c]) return;
+      const pa=lmPx(lms,a,W,H), pb=lmPx(lms,b,W,H), pc=lmPx(lms,c,W,H);
+      const angle = calcAngle3(pa,pb,pc);
+      const col = '#facc15';
+      const txt = `${angle}°`;
+      const tw = ctx.measureText(txt).width;
+      const tx = Math.min(Math.max(pb.x - tw/2, 2), W-tw-4);
+      const ty = pb.y > H*0.75 ? pb.y - 16 : pb.y + fs + 4;
+      ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(tx-3,ty-fs+2,tw+10,fs+4);
+      ctx.fillStyle=col; ctx.fillText(txt,tx+2,ty);
+    });
+  }
+}
+
+// --- Live overlay on video ---
+function drawLiveOverlay(currentTime) {
+  if (!analysisData) return;
+  const vid = document.getElementById('videoPlayer');
+  const canvas = document.getElementById('overlayCanvas');
+  canvas.width = vid.clientWidth;
+  canvas.height = vid.clientHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Show phase name overlay
+  if (overlayState.errors && analysisData.phases) {
+    const active = analysisData.phases.find(p => currentTime >= (p.start_sec||0) && currentTime <= (p.end_sec||Infinity));
+    if (active) {
+      const col = scoreColor(active.score);
+      ctx.fillStyle='rgba(0,0,0,0.55)';
+      ctx.fillRect(8,8,160,26);
+      ctx.fillStyle=col; ctx.font='500 12px system-ui';
+      ctx.fillText(`${active.name} · ${active.score}/100`,14,25);
+    }
+  }
+}
+
+function toggleOverlay(key, btn) {
+  overlayState[key] = !overlayState[key];
+  btn.classList.toggle('on', overlayState[key]);
+  btn.classList.toggle('off', !overlayState[key]);
+}
+
+// --- Drill generation ---
+function renderDrillCards() {
+  const dg = document.getElementById('drillGrid'); dg.innerHTML = '';
+  drillDefs.forEach((d,i) => {
+    const card = document.createElement('div'); card.className = 'drill-card'; card.id = `drill-${i}`;
+    card.innerHTML = `<div class="drill-gen" id="dimg-${i}">
+      <div class="spinner"></div>
+      <div style="color:rgba(255,255,255,0.6);font-size:10px;text-align:center;padding:0 8px;">Generating...</div>
+    </div>
+    <div class="drill-body">
+      <div class="drill-num">${d.num}</div>
+      <div class="drill-title">${d.title}</div>
+      <div class="drill-desc">${d.desc}</div>
+      <button class="btn w-full" style="font-size:11px;padding:5px;" id="dregen-${i}" onclick="generateOneDrill(${i})">↺ Generate ulang</button>
+    </div>`;
+    dg.appendChild(card);
+  });
+}
+
+async function generateDrills() {
+  renderDrillCards();
+  const statusEl = document.getElementById('drillStatus');
+  for (let i=0; i<drillDefs.length; i++) {
+    if (statusEl) statusEl.textContent = `Generating ${i+1}/${drillDefs.length}...`;
+    await generateOneDrill(i);
+    await new Promise(ok=>setTimeout(ok,400));
+  }
+  if (statusEl) statusEl.textContent = '';
+}
+
+async function generateOneDrill(idx) {
+  const wrap = document.getElementById(`dimg-${idx}`);
+  const btn = document.getElementById(`dregen-${idx}`);
+  if (!wrap) return;
+  if (btn) btn.disabled = true;
+  wrap.className='drill-gen';
+  wrap.innerHTML=`<div class="spinner"></div><div style="color:rgba(255,255,255,0.6);font-size:10px;text-align:center;padding:0 8px;">DALL-E 3...</div>`;
+  try {
+    const res=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mode:'dalle',prompt:drillDefs[idx].prompt})});
+    const data=await res.json();
+    if(data.error)throw new Error(data.error.message);
+    const img=document.createElement('img');img.src=data.data[0].url;img.className='drill-img';img.alt=drillDefs[idx].title;
+    wrap.replaceWith(img);
+  } catch(e){
+    wrap.className='drill-gen';
+    wrap.innerHTML=`<div style="color:#f87171;font-size:11px;text-align:center;padding:8px;">⚠ ${e.message}</div>`;
+  }
+  if (btn) btn.disabled=false;
+}
+
+// --- Chat ---
+async function sendChat() {
+  const txt = document.getElementById('chatInput').value.trim(); if(!txt)return;
+  document.getElementById('chatInput').value='';
+  addMsg('user',txt);
+  const newHist=[...chatHist,{role:'user',content:txt}];
+  const tid=addTyping(); document.getElementById('sendBtn').disabled=true;
+  try {
+    const sys=`You are SwingIQ, expert AI golf coach. Respond in Bahasa Indonesia, warm and specific, max 150 words. ${analysisData?'Video analysis data: '+JSON.stringify(analysisData):''}`;
+    const res=await fetch(PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({service:'chat',payload:{model:'gpt-4o',max_tokens:400,messages:[{role:'system',content:sys},...newHist.slice(-8)]}})});
+    const data=await res.json();
+    if(data.error)throw new Error(data.error.message);
+    const reply=data.choices[0].message.content;
+    removeTyping(tid); addMsg('ai',reply);
+    chatHist=[...newHist,{role:'assistant',content:reply}];
+  } catch(e){ removeTyping(tid); addMsg('ai','Maaf ada gangguan: '+e.message); }
+  document.getElementById('sendBtn').disabled=false;
+}
+
+function askQ(q){ document.getElementById('chatInput').value=q; sendChat(); }
+
+function resetAll() {
+  videoFile=null; videoUrl=null; analysisData=null; chatHist=[]; showingAll=false; showingAllAngles=false;
+  poseInstance=null; frameData={};
+  const vid=document.getElementById('videoPlayer'); vid.src=''; vid.pause();
+  const canvas=document.getElementById('overlayCanvas');
+  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById('videoInfo').style.display='none';
+  document.getElementById('analyzeSection').style.display='none';
+  document.getElementById('reportSection').style.display='none';
+  document.getElementById('resetBtn').style.display='none';
+  document.getElementById('analyzeBtn').disabled=false;
+  document.getElementById('chatInput').disabled=true;
+  document.getElementById('sendBtn').disabled=true;
+  document.getElementById('chips').style.display='none';
+  document.getElementById('chatMsgs').innerHTML=`<div class="msg ai"><div class="mlbl">SwingIQ Coach</div><div class="bubble ai">Halo! Upload video swing kamu dan klik Analisa. 🎬</div></div>`;
+  document.getElementById('fileInput').value='';
+  setStatus('Siap dianalisa.');
+}
+</script>
+</body>
+</html>
