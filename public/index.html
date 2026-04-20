@@ -428,6 +428,113 @@ function handleVideoSelect(file) {
   setStatus('Video dipilih. Klik Analisa untuk memulai.');
 }
 
+// --- Visual P1-P10 detection using GPT-4o ---
+async function detectP1P10Visual(frames) {
+  // Send all frames with their indices as a grid to GPT-4o
+  // GPT-4o will visually identify which frame matches each golf position
+
+  const imageContent = frames.map((f, i) => ([
+    { type: 'text', text: `[Frame ${i} @ ${f.timestamp.toFixed(2)}s]` },
+    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
+  ])).flat();
+
+  const prompt = `You are an expert golf swing analyzer. I will show you ${frames.length} sequential frames from a golf swing video.
+
+Your task: identify which frame BEST matches each of these 10 golf swing positions based on the VISUAL body/club position you see:
+
+P1 - Setup/Address: Golfer standing upright, club at address position near ball, weight balanced
+P2 - Takeaway: Club moving away from ball, still low to ground, hands around hip height  
+P3 - Backswing: Club shaft around horizontal, lead arm starting to fold, shoulders turning
+P4 - Top of Backswing: Club at highest point, lead arm horizontal or above, max shoulder turn, back facing target
+P5 - Start Downswing: Club starting to come down, hips beginning to shift toward target, transition
+P6 - Shaft Parallel Down (Lag): Club shaft parallel to ground on way down, wrist lag maintained
+P7 - Impact: Club at ball contact point, arms extended, hips open to target, head behind ball
+P8 - Early Follow Through: Club past impact, arms extending, chest starting to face target
+P9 - Late Follow Through: Club around horizontal on follow through side, body mostly rotated
+P10 - Finish: Full rotation complete, weight fully on lead foot, club behind head/back
+
+CRITICAL RULES:
+- Base your choice ONLY on what you visually see in each frame
+- Each position must use a DIFFERENT frame index
+- Order must be chronological: P1 index < P2 index < ... < P10 index  
+- If you cannot see a clear distinction between two consecutive positions, pick the closest match
+- For fast phases (P5-P7 downswing/impact), multiple positions may be within 1-2 frames of each other
+
+Respond ONLY with a raw JSON array, no markdown, no explanation:
+[
+  {"position":"P1","name":"Setup","frame_index":0,"confidence":"high","visual_cue":"club at address"},
+  {"position":"P2","name":"Takeaway","frame_index":2,"confidence":"high","visual_cue":"club low and back"},
+  ...all 10 positions...
+]`;
+
+  const res = await fetch('/api/proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      service: 'chat',
+      payload: {
+        model: 'gpt-4o',
+        max_tokens: 600,
+        messages: [{
+          role: 'user',
+          content: [...imageContent, { type: 'text', text: prompt }]
+        }]
+      }
+    })
+  });
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'Detection failed');
+
+  let raw = data.choices[0].message.content.trim();
+  raw = raw.replace(/```json|```/g, '').trim();
+
+  // Extract JSON array
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) {
+    console.warn('Visual detection failed, falling back to timing estimate. Response:', raw.substring(0,200));
+    return fallbackTimingPositions(frames);
+  }
+
+  try {
+    const positions = JSON.parse(match[0]);
+    // Validate: ensure all 10 positions present and indices are valid
+    if (positions.length < 10) {
+      console.warn('Incomplete positions detected, using fallback');
+      return fallbackTimingPositions(frames);
+    }
+    // Clamp indices to valid range
+    positions.forEach(p => {
+      p.frame_index = Math.min(Math.max(0, p.frame_index||0), frames.length-1);
+    });
+    // Enforce chronological order
+    for (let i = 1; i < positions.length; i++) {
+      if (positions[i].frame_index <= positions[i-1].frame_index) {
+        positions[i].frame_index = Math.min(positions[i-1].frame_index + 1, frames.length-1);
+      }
+    }
+    return { positions };
+  } catch(e) {
+    console.warn('Parse error, using fallback:', e.message);
+    return fallbackTimingPositions(frames);
+  }
+}
+
+// Fallback: time-based distribution if visual detection fails
+function fallbackTimingPositions(frames) {
+  const P_NAMES = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
+  // Golf swing timing: setup slow, downswing very fast
+  const P_PERCENT = [0, 0.12, 0.25, 0.40, 0.52, 0.62, 0.70, 0.78, 0.87, 1.0];
+  const positions = P_NAMES.map((name, i) => ({
+    position: `P${i+1}`,
+    name,
+    frame_index: Math.min(Math.round(P_PERCENT[i] * (frames.length-1)), frames.length-1),
+    confidence: 'low',
+    visual_cue: 'timing estimate'
+  }));
+  return { positions };
+}
+
 // --- Main analysis pipeline ---
 async function runFullAnalysis() {
   if (!videoFile) return;
@@ -453,33 +560,33 @@ async function runFullAnalysis() {
       setTimeout(resolve, 3000); // fallback timeout
     });
 
-    // Step 3: Extract frames - use fewer frames (10) for reliability
-    setStatus('Mengextract frame dari video...', 'run');
-    const allFrames = await extractFrames(vid, 10);
-    addMsg('ai', `${allFrames.length} frame berhasil diextract dari video ${fmtTime(vid.duration||0)}.`);
+    // Step 3: Extract 20 frames evenly from video
+    setStatus('Mengextract 20 frame dari video...', 'run');
+    const allFrames = await extractFrames(vid, 20);
+    addMsg('ai', `${allFrames.length} frame diextract dari video ${fmtTime(vid.duration||0)}.`);
 
-    // Step 4: Auto-assign P1-P10 evenly (no detect API call needed)
-    setStatus('Memetakan P1–P10...', 'run');
-    const P_NAMES = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
-    const positions = P_NAMES.map((name, i) => ({
-      position: `P${i+1}`,
-      name,
-      frame_index: Math.min(Math.round(i * (allFrames.length - 1) / 9), allFrames.length - 1)
-    }));
-    addMsg('ai', `P1–P10 dipetakan otomatis dari ${allFrames.length} frame.`);
+    // Step 4: GPT-4o visually detect P1-P10 from actual frames
+    setStatus('GPT-4o mendeteksi posisi P1–P10 dari gambar...', 'run');
+    const detectResult = await detectP1P10Visual(allFrames);
+    const detectedPositions = detectResult.positions; // [{position:'P1', frame_index:0, name:'Setup'}, ...]
+    addMsg('ai', `Posisi P1–P10 terdeteksi secara visual dari ${allFrames.length} frame.`);
 
-    // Step 5: Select frames from allFrames based on detected positions
-    setStatus('Menyiapkan 10 frame P1–P10...', 'run');
+    // Step 5: Extract high-quality frames at detected positions
+    setStatus('Mengambil frame P1–P10 resolusi tinggi...', 'run');
     const selectedFrames = [];
-    const positions_p = ['P1','P2','P3','P4','P5','P6','P7','P8','P9','P10'];
-    const names_p = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
-
-    for (let i = 0; i < 10; i++) {
-      const p = positions[i] || { position: positions_p[i], name: names_p[i], frame_index: Math.floor(i * allFrames.length / 10) };
-      const safeIdx = Math.min(Math.max(0, p.frame_index || 0), allFrames.length - 1);
-      const frame = allFrames[safeIdx];
-      if (frame) selectedFrames.push({ ...frame, position: p.position, posName: p.name, frame_index: i });
+    for (const p of detectedPositions) {
+      const srcFrame = allFrames[Math.min(p.frame_index, allFrames.length-1)];
+      // Re-extract at that timestamp for better quality
+      const hqFrame = await extractFrameAt(vid, srcFrame.timestamp);
+      selectedFrames.push({
+        ...hqFrame,
+        position: p.position,
+        posName: p.name,
+        frame_index: selectedFrames.length
+      });
     }
+
+    const positions = selectedFrames.map(f => ({ position: f.position, name: f.posName, frame_index: f.frame_index }));
 
     // Step 6: Full analysis — send 10 frames to analyze API
     setStatus('Menganalisa 10 posisi swing P1–P10...', 'run');
@@ -628,14 +735,13 @@ async function extractAndAnalyzeErrorFrames(d) {
   const phases = d.phases || [];
 
   for (const ef of d.error_frames) {
-    // Find correct frame from selectedFrames or phases
-    const frameIdx = typeof ef.frame_index === 'number' ? ef.frame_index : 0;
+    // Get frame directly from selectedFrames by position (P1=0, P2=1, ... P10=9)
+    const posNum = parseInt((ef.position||'P1').replace('P','')) - 1;
+    const frameIdx = Math.min(Math.max(0, posNum), selectedFrames.length - 1);
     const storedFrame = selectedFrames[frameIdx];
-    // Find phase timestamp by position
-    const matchPhase = phases.find(p => p.position === ef.position);
+    const ts = storedFrame?.timestamp ?? (frameIdx * (vid.duration||2) / 9);
     const canvasId = `ec-${ef.position||frameIdx}`;
     const badgeCls = ef.status === 'bad' ? 'bad' : 'warn';
-    const ts = matchPhase?.timestamp || storedFrame?.timestamp || (frameIdx * (vid.duration||2) / 9);
     const card = document.createElement('div'); card.className = 'err-card';
     card.innerHTML = `<div class="err-frame">
       <canvas id="${canvasId}" width="320" height="180"></canvas>
@@ -1010,14 +1116,29 @@ let poseLoopActive = false;
 let _poseRunning = false;
 
 function getVideoRenderedRect(vid) {
-  // Calculate actual rendered size of video (respecting object-fit: contain)
+  // Calculate actual rendered area of video content (object-fit: contain)
   const vW = vid.videoWidth || 640;
   const vH = vid.videoHeight || 360;
-  const cW = vid.clientWidth;
-  const cH = vid.clientHeight;
-  const ratio = Math.min(cW / vW, cH / vH);
-  const rW = vW * ratio;
-  const rH = vH * ratio;
+  const cW = vid.clientWidth || vid.offsetWidth;
+  const cH = vid.clientHeight || vid.offsetHeight;
+
+  if (!vW || !vH || !cW || !cH) return { x:0, y:0, w:cW||640, h:cH||360 };
+
+  // object-fit: contain — fit entire video within container, letterbox if needed
+  const vidRatio = vW / vH;
+  const conRatio = cW / cH;
+
+  let rW, rH;
+  if (vidRatio > conRatio) {
+    // Video wider than container → pillarbox (black bars left/right)
+    rW = cW;
+    rH = cW / vidRatio;
+  } else {
+    // Video taller than container → letterbox (black bars top/bottom)
+    rH = cH;
+    rW = cH * vidRatio;
+  }
+
   const rX = (cW - rW) / 2;
   const rY = (cH - rH) / 2;
   return { x: rX, y: rY, w: rW, h: rH };
