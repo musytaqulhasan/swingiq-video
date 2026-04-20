@@ -350,17 +350,15 @@ async function runFullAnalysis() {
     const allFrames = await extractFrames(vid, 30);
     addMsg('ai', `30 frame berhasil diextract dari video ${fmtTime(vid.duration||0)}.`);
 
-    // Step 4: AI detect which frames are P1-P10
-    setStatus('AI mendeteksi posisi P1–P10...', 'run');
-    const detectRes = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'detect', frames: allFrames })
-    });
-    const detectData = await detectRes.json();
-    if (detectData.error) throw new Error(detectData.error);
-    const positions = detectData.positions;
-    addMsg('ai', `Posisi P1–P10 terdeteksi! Mengambil frame resolusi tinggi...`);
+    // Step 4: Auto-assign P1-P10 evenly (no detect API call needed)
+    setStatus('Memetakan P1–P10...', 'run');
+    const P_NAMES = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
+    const positions = P_NAMES.map((name, i) => ({
+      position: `P${i+1}`,
+      name,
+      frame_index: Math.min(Math.round(i * (allFrames.length - 1) / 9), allFrames.length - 1)
+    }));
+    addMsg('ai', `P1–P10 dipetakan otomatis dari ${allFrames.length} frame.`);
 
     // Step 5: Select frames from allFrames based on detected positions
     setStatus('Menyiapkan 10 frame P1–P10...', 'run');
