@@ -539,6 +539,24 @@ function fallbackTimingPositions(frames) {
 async function runFullAnalysis() {
   if (!videoFile) return;
   document.getElementById('analyzeBtn').disabled = true;
+
+  // Clear ALL previous analysis data before starting new analysis
+  analysisData = null;
+  chatHist = [];
+  showingAllAngles = false;
+  if (radarChartInstance) { radarChartInstance.destroy(); radarChartInstance = null; }
+  document.getElementById('reportSection').style.display = 'none';
+  document.getElementById('errorSection').style.display = 'none';
+  document.getElementById('errorGrid').innerHTML = '';
+  document.getElementById('scoreGrid').innerHTML = '';
+  document.getElementById('angleRows').innerHTML = '';
+  document.getElementById('drillGrid').innerHTML = '';
+  document.getElementById('insightBox').style.display = 'none';
+  const radarCard = document.getElementById('radarCard');
+  if (radarCard) radarCard.style.display = 'none';
+  const overlayCanvas = document.getElementById('overlayCanvas');
+  overlayCanvas.getContext('2d').clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
   addMsg('user', `Analisa video swing saya: ${videoFile.name}`);
 
   try {
