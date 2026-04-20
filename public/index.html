@@ -190,9 +190,10 @@
               </div>
               <div class="time-disp" id="timeDisp">0:00 / 0:00</div>
             </div>
-            <div style="padding:0 10px 4px;background:rgba(0,0,0,0.5);">
+            <div style="padding:0 10px 6px;background:rgba(0,0,0,0.5);">
               <div class="phase-bar" id="phaseBar"></div>
-              <div class="phase-info" id="phaseInfo">Klik fase untuk jump ke momen tersebut</div>
+              <div id="p1p10Nav" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;justify-content:center;"></div>
+              <div class="phase-info" id="phaseInfo" style="margin-top:4px;">Klik P1–P10 untuk jump ke posisi tersebut</div>
             </div>
           </div>
         </div>
@@ -203,7 +204,7 @@
         <div class="card-header"><span class="card-title">Skor per Fase</span></div>
         <div class="card-body">
           <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);">
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#dc2626;margin-right:3px;"></span>0–69 Amatir</span>
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#dc2626;margin-right:3px;"></span>0–69 Beginner</span>
             <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#2563eb;margin-right:3px;"></span>70–89 Advance</span>
             <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#16a34a;margin-right:3px;"></span>90–100 Pro</span>
           </div>
@@ -231,11 +232,21 @@
       <!-- Coach insight -->
       <div class="insight" id="insightBox" style="display:none;"></div>
 
+      <!-- Radar chart -->
+      <div class="card" id="radarCard" style="display:none;">
+        <div class="card-header"><span class="card-title">Profil Swing</span></div>
+        <div class="card-body">
+          <div style="position:relative;width:100%;height:240px;">
+            <canvas id="radarChart"></canvas>
+          </div>
+          <div id="radarLegend" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;justify-content:center;"></div>
+        </div>
+      </div>
+
       <!-- Drill illustrations -->
       <div class="card">
         <div class="card-header">
           <span class="card-title">Ilustrasi Drill</span>
-          <span id="drillStatus" style="font-size:11px;color:var(--muted);"></span>
         </div>
         <div class="card-body">
           <div class="drill-grid" id="drillGrid"></div>
@@ -285,17 +296,112 @@ let overlayState = { skeleton:true, angles:true, lines:true, errors:true };
 let currentPoseResult = null;
 
 const drillDefs = [
-  { num:'Prioritas 1', title:'Elbow Tuck Drill', desc:'Jepit headcover di ketiak kanan saat backswing. 20x sebelum setiap sesi.',
-    prompt:'Minimalist golf swing instruction diagram, pure white background, two clearly separated panels. Male golfer in thin soft gray line art, no heavy fill. LEFT panel GREEN CHECKMARK: right elbow pressed firmly against ribcage, arm hugging torso during backswing. RIGHT panel RED X: right elbow flying dramatically outward at 90 degrees — extremely exaggerated flying elbow. Clean minimal airy line art.' },
-  { num:'Prioritas 2', title:'Shoulder Turn Drill', desc:'Silangkan tangan di dada, putar hingga punggung menghadap target (90°). 30x/hari.',
-    prompt:'Minimalist golf swing instruction diagram, pure white background, two clearly separated panels. Male golfer in thin soft gray line art. LEFT panel GREEN CHECKMARK: full 90-degree shoulder rotation, back completely facing target, dotted arc labeled 90°. RIGHT panel RED X: barely any shoulder turn at 25 degrees — extremely exaggerated minimal rotation. Degree labels (90° vs 25°).' },
-  { num:'Prioritas 3', title:'Hip Bump Drill', desc:'Geser pinggul kiri ke target sebelum tangan turun di downswing.',
-    prompt:'Minimalist golf swing instruction diagram, pure white background, two clearly separated panels. Male golfer in thin soft gray line art. LEFT panel GREEN CHECKMARK: hips shifted toward target, lower body leading, bold arrow showing lateral hip shift. RIGHT panel RED X: arms thrown dramatically over-the-top, steep outside-in path, hips square — greatly exaggerated wrong movement.' },
+  {
+    num: 'Drill 1', title: 'Elbow Tuck Drill',
+    desc: 'Jepit headcover di ketiak kanan saat backswing. Siku tidak boleh keluar dari badan. 20x sebelum setiap sesi.',
+    tip: 'Fokus: siku kanan tetap rapat ke tulang rusuk sepanjang backswing',
+    color: '#dc2626',
+    svg: `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="14" font-size="9" text-anchor="middle" fill="#16a34a" font-weight="600">✓ BENAR</text>
+      <text x="150" y="14" font-size="9" text-anchor="middle" fill="#dc2626" font-weight="600">✗ SALAH</text>
+      <line x1="100" y1="0" x2="100" y2="120" stroke="#e5e7eb" stroke-width="0.5"/>
+      <circle cx="50" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="50" y1="35" x2="50" y2="65" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="50" y1="65" x2="42" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="50" y1="65" x2="58" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="44" y1="48" x2="44" y2="38" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+      <line x1="56" y1="46" x2="66" y2="32" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="44" cy="38" r="3" fill="#2563eb"/>
+      <circle cx="66" cy="32" r="3" fill="#2563eb"/>
+      <circle cx="150" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="150" y1="35" x2="150" y2="65" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="65" x2="142" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="65" x2="158" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="144" y1="48" x2="130" y2="40" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+      <line x1="156" y1="46" x2="178" y2="28" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="130" cy="40" r="3" fill="#dc2626"/>
+      <circle cx="178" cy="28" r="3" fill="#dc2626"/>
+      <path d="M 172 22 A 12 12 0 0 0 156 38" stroke="#dc2626" stroke-width="1" fill="none" stroke-dasharray="2 2"/>
+    </svg>`
+  },
+  {
+    num: 'Drill 2', title: 'Shoulder Turn Drill',
+    desc: 'Silangkan tangan di dada, putar hingga punggung menghadap target (90°). 30x per hari.',
+    tip: 'Fokus: punggung harus penuh menghadap target di top of backswing',
+    color: '#d97706',
+    svg: `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="14" font-size="9" text-anchor="middle" fill="#16a34a" font-weight="600">✓ 90°</text>
+      <text x="150" y="14" font-size="9" text-anchor="middle" fill="#dc2626" font-weight="600">✗ 45°</text>
+      <line x1="100" y1="0" x2="100" y2="120" stroke="#e5e7eb" stroke-width="0.5"/>
+      <circle cx="50" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="50" y1="35" x2="50" y2="75" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="50" y1="75" x2="42" y2="105" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="50" y1="75" x2="58" y2="105" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="30" y1="52" x2="70" y2="52" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M 50 52 A 20 20 0 0 0 30 52" stroke="#16a34a" stroke-width="1.5" fill="none"/>
+      <text x="28" y="50" font-size="7" fill="#16a34a">90°</text>
+      <circle cx="150" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="150" y1="35" x2="150" y2="75" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="75" x2="142" y2="105" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="75" x2="158" y2="105" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="136" y1="52" x2="164" y2="52" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round"/>
+      <text x="126" y="50" font-size="7" fill="#dc2626">45°</text>
+    </svg>`
+  },
+  {
+    num: 'Drill 3', title: 'Hip Bump Drill',
+    desc: 'Geser pinggul kiri ke target sebelum tangan turun di awal downswing.',
+    tip: 'Fokus: pinggul memimpin downswing, tangan mengikuti',
+    color: '#2563eb',
+    svg: `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="14" font-size="9" text-anchor="middle" fill="#16a34a" font-weight="600">✓ BENAR</text>
+      <text x="150" y="14" font-size="9" text-anchor="middle" fill="#dc2626" font-weight="600">✗ SALAH</text>
+      <line x1="100" y1="0" x2="100" y2="120" stroke="#e5e7eb" stroke-width="0.5"/>
+      <circle cx="55" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="55" y1="35" x2="52" y2="65" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="52" y1="65" x2="42" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="52" y1="65" x2="62" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M 44 65 L 56 65" stroke="#2563eb" stroke-width="3" stroke-linecap="round"/>
+      <path d="M 54 62 L 60 65 L 54 68" fill="#2563eb"/>
+      <circle cx="150" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="150" y1="35" x2="150" y2="65" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="65" x2="140" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="65" x2="160" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="144" y1="48" x2="172" y2="28" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+      <path d="M 150 48 L 178 22" stroke="#dc2626" stroke-width="1.5" fill="none" stroke-dasharray="3 2"/>
+      <text x="170" y="20" font-size="7" fill="#dc2626">OTT</text>
+    </svg>`
+  },
+  {
+    num: 'Drill 4', title: 'Weight Transfer Drill',
+    desc: 'Mulai dari 70% berat di kaki kanan saat address, transfer ke kaki kiri saat impact.',
+    tip: 'Fokus: perpindahan berat badan yang mulus dari backswing ke follow through',
+    color: '#16a34a',
+    svg: `<svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+      <text x="50" y="14" font-size="9" text-anchor="middle" fill="#16a34a" font-weight="600">✓ BENAR</text>
+      <text x="150" y="14" font-size="9" text-anchor="middle" fill="#dc2626" font-weight="600">✗ SALAH</text>
+      <line x1="100" y1="0" x2="100" y2="120" stroke="#e5e7eb" stroke-width="0.5"/>
+      <circle cx="50" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="50" y1="35" x2="48" y2="65" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="48" y1="65" x2="38" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="48" y1="65" x2="62" y2="92" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="38" cy="95" r="4" fill="#2563eb" opacity="0.3"/>
+      <circle cx="62" cy="92" r="6" fill="#2563eb"/>
+      <text x="55" y="110" font-size="7" fill="#2563eb">70%</text>
+      <circle cx="150" cy="28" r="7" fill="#9ca3af"/>
+      <line x1="150" y1="35" x2="150" y2="65" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="65" x2="138" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="150" y1="65" x2="162" y2="95" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="138" cy="95" r="6" fill="#dc2626"/>
+      <circle cx="162" cy="95" r="6" fill="#dc2626"/>
+      <text x="130" y="110" font-size="7" fill="#dc2626">50/50</text>
+    </svg>`
+  },
 ];
 
 function scoreColor(s){ return s>=90?'#16a34a':s>=70?'#2563eb':'#dc2626'; }
 function scoreClass(s){ return s>=90?'green':s>=70?'blue':'red'; }
-function scoreLabel(s){ return s>=90?'Pro':s>=70?'Advance':'Amatir'; }
+function scoreLabel(s){ return s>=90?'Pro':s>=70?'Advance':'Beginner'; }
 function fmtTime(s){ const m=Math.floor(s/60),sec=Math.floor(s%60); return `${m}:${sec.toString().padStart(2,'0')}`; }
 function setStatus(msg,type=''){ const el=document.getElementById('statusBar');if(!el)return;el.textContent=msg;el.className='status'+(type?' '+type:''); }
 function addMsg(role,html){ const cm=document.getElementById('chatMsgs');const d=document.createElement('div');d.className=`msg ${role}`;d.innerHTML=`<div class="mlbl">${role==='user'?'Kamu':'SwingIQ Coach'}</div><div class="bubble ${role}">${html}</div>`;cm.appendChild(d);cm.scrollTop=cm.scrollHeight;return d; }
@@ -447,7 +553,14 @@ function updateVideoProgress() {
   document.getElementById('progressFill').style.width = pct + '%';
   document.getElementById('timeDisp').textContent = `${fmtTime(vid.currentTime)} / ${fmtTime(vid.duration||0)}`;
   updateActivePhase(vid.currentTime);
-  if (analysisData) drawLiveOverlay(vid.currentTime);
+  if (analysisData) {
+    drawLiveOverlay(vid.currentTime);
+    // Run MediaPipe every ~10 frames (not every frame - too heavy)
+    if (!updateVideoProgress._lastPose || Date.now() - updateVideoProgress._lastPose > 500) {
+      updateVideoProgress._lastPose = Date.now();
+      runMediaPipeOnFrame(vid);
+    }
+  }
 }
 
 function seekVideo(e) {
@@ -512,12 +625,17 @@ async function extractAndAnalyzeErrorFrames(d) {
   const errorSection = document.getElementById('errorSection');
   errorGrid.innerHTML = ''; errorSection.style.display = 'block';
   const selectedFrames = d._selectedFrames || [];
+  const phases = d.phases || [];
 
   for (const ef of d.error_frames) {
-    const storedFrame = selectedFrames[ef.frame_index];
-    const canvasId = `ec-${ef.position||ef.frame_index}`;
+    // Find correct frame from selectedFrames or phases
+    const frameIdx = typeof ef.frame_index === 'number' ? ef.frame_index : 0;
+    const storedFrame = selectedFrames[frameIdx];
+    // Find phase timestamp by position
+    const matchPhase = phases.find(p => p.position === ef.position);
+    const canvasId = `ec-${ef.position||frameIdx}`;
     const badgeCls = ef.status === 'bad' ? 'bad' : 'warn';
-    const ts = storedFrame?.timestamp || 0;
+    const ts = matchPhase?.timestamp || storedFrame?.timestamp || (frameIdx * (vid.duration||2) / 9);
     const card = document.createElement('div'); card.className = 'err-card';
     card.innerHTML = `<div class="err-frame">
       <canvas id="${canvasId}" width="320" height="180"></canvas>
@@ -717,7 +835,36 @@ function renderReport(d) {
   // Radar chart
   if (d.radar) renderRadar(d.radar, d.overall_score);
 
+  // Build P1-P10 navigation
+  renderP1P10Nav(d.phases || []);
+
   addMsg('ai', `<strong>Analisa P1–P10 selesai!</strong> Skor overall: <strong>${d.overall_score}/100</strong> (${scoreLabel(d.overall_score)})<br><br>${d.summary}`);
+}
+
+function renderP1P10Nav(phases) {
+  const nav = document.getElementById('p1p10Nav');
+  if (!nav) return;
+  nav.innerHTML = '';
+  phases.forEach((p, i) => {
+    const col = scoreColor(p.score);
+    const btn = document.createElement('button');
+    btn.style.cssText = `font-size:9px;font-weight:600;padding:3px 6px;border-radius:6px;border:1.5px solid ${col};background:transparent;color:${col};cursor:pointer;font-family:inherit;transition:all .15s;`;
+    btn.textContent = p.position || `P${i+1}`;
+    btn.title = `${p.name} · Skor ${p.score}`;
+    btn.onmouseover = () => btn.style.background = col + '22';
+    btn.onmouseout = () => btn.style.background = 'transparent';
+    btn.onclick = () => {
+      const vid = document.getElementById('videoPlayer');
+      const ts = p.timestamp || (i * (vid.duration||2) / 9);
+      vid.currentTime = ts;
+      document.getElementById('phaseInfo').textContent = `${p.position||''} ${p.name} · Skor ${p.score} (${scoreLabel(p.score)})`;
+      // Highlight active button
+      nav.querySelectorAll('button').forEach(b => b.style.opacity = '0.5');
+      btn.style.opacity = '1';
+      btn.style.background = col + '33';
+    };
+    nav.appendChild(btn);
+  });
 }
 
 function renderPhaseDash(phases) {
@@ -792,6 +939,32 @@ function toggleOverlay(key, btn) {
   overlayState[key] = !overlayState[key];
   btn.classList.toggle('on', overlayState[key]);
   btn.classList.toggle('off', !overlayState[key]);
+  // Redraw overlay immediately
+  const vid = document.getElementById('videoPlayer');
+  runMediaPipeOnFrame(vid);
+}
+
+let poseLoopActive = false;
+async function runMediaPipeOnFrame(vid) {
+  if (vid.paused || vid.ended) {
+    // For paused video, run once
+    const canvas = document.getElementById('overlayCanvas');
+    if (!canvas || !canvas.width) return;
+    canvas.width = vid.clientWidth || vid.videoWidth || 640;
+    canvas.height = vid.clientHeight || vid.videoHeight || 360;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawLiveOverlay(vid.currentTime);
+    try {
+      const pose = await getPoseInstance();
+      pose.onResults(results => {
+        if (results.poseLandmarks) {
+          drawPoseOnCanvas(ctx, results.poseLandmarks, canvas.width, canvas.height);
+        }
+      });
+      await pose.send({ image: vid });
+    } catch(e) { /* MediaPipe not available or failed */ }
+  }
 }
 
 // --- Drill generation ---
@@ -862,16 +1035,18 @@ function renderDrillCards() {
   const dg = document.getElementById('drillGrid'); dg.innerHTML = '';
   drillDefs.forEach((d,i) => {
     const card = document.createElement('div'); card.className = 'drill-card'; card.id = `drill-${i}`;
-    card.innerHTML = `<div class="drill-gen" id="dimg-${i}">
-      <div class="spinner"></div>
-      <div style="color:rgba(255,255,255,0.6);font-size:10px;text-align:center;padding:0 8px;">Generating...</div>
-    </div>
-    <div class="drill-body">
-      <div class="drill-num">${d.num}</div>
-      <div class="drill-title">${d.title}</div>
-      <div class="drill-desc">${d.desc}</div>
-      <button class="btn w-full" style="font-size:11px;padding:5px;" id="dregen-${i}" onclick="generateOneDrill(${i})">↺ Generate ulang</button>
-    </div>`;
+    card.innerHTML = `
+      <div style="background:#f8fafc;padding:12px;border-bottom:1px solid var(--border);">
+        ${d.svg}
+      </div>
+      <div class="drill-body">
+        <div class="drill-num">${d.num}</div>
+        <div class="drill-title">${d.title}</div>
+        <div class="drill-desc">${d.desc}</div>
+        <div style="font-size:10px;padding:6px 8px;background:#f0fdf4;border-radius:6px;color:#15803d;border-left:3px solid #16a34a;">
+          💡 ${d.tip}
+        </div>
+      </div>`;
     dg.appendChild(card);
   });
 }
@@ -949,5 +1124,6 @@ function resetAll() {
   setStatus('Siap dianalisa.');
 }
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </body>
 </html>
