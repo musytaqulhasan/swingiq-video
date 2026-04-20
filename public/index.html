@@ -653,25 +653,8 @@ async function extractAndAnalyzeErrorFrames(d) {
     </div>`;
     errorGrid.appendChild(card);
 
-    if (storedFrame) {
-      const canvas = document.getElementById(canvasId);
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); };
-        img.src = `data:image/jpeg;base64,${storedFrame.base64}`;
-        // Also run MediaPipe on stored frame
-        try {
-          const pose = await getPoseInstance();
-          pose.onResults(results => {
-            if (results.poseLandmarks) drawPoseOnCanvas(ctx, results.poseLandmarks, canvas.width, canvas.height);
-          });
-          await pose.send({ image: canvas });
-        } catch(e) { console.warn('MediaPipe:', e.message); }
-      }
-    } else if (ts > 0) {
-      await extractFrameWithOverlay(vid, ts, canvasId);
-    }
+    // Always seek video to correct timestamp for error frame
+    await captureErrorFrame(vid, ts, canvasId, storedFrame);
   }
 }
 async function extractFrameWithOverlay(vid, timestamp, canvasId) {
@@ -704,6 +687,51 @@ async function extractFrameWithOverlay(vid, timestamp, canvasId) {
       }
     };
   });
+}
+
+async function captureErrorFrame(vid, timestamp, canvasId, storedFrame) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  if (storedFrame?.base64) {
+    // Use stored frame directly — no seek needed, guaranteed correct frame
+    await new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve();
+      };
+      img.onerror = resolve;
+      img.src = `data:image/jpeg;base64,${storedFrame.base64}`;
+    });
+  } else if (timestamp > 0) {
+    // Seek video to timestamp and capture
+    await new Promise(resolve => {
+      const wasPlaying = !vid.paused;
+      vid.pause();
+      vid.currentTime = timestamp;
+      vid.onseeked = () => {
+        ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+        if (wasPlaying) vid.play();
+        resolve();
+      };
+      setTimeout(resolve, 2000); // fallback
+    });
+  }
+
+  // Run MediaPipe on captured frame
+  try {
+    const pose = await getPoseInstance();
+    pose.onResults(results => {
+      if (results.poseLandmarks) {
+        // Draw on full canvas (error frame canvas is fixed size)
+        const rect = { x:0, y:0, w:canvas.width, h:canvas.height };
+        drawPoseOnCanvasRect(ctx, results.poseLandmarks, rect);
+      }
+    });
+    await pose.send({ image: canvas });
+  } catch(e) { /* MediaPipe failed silently */ }
 }
 
 async function getPoseInstance() {
@@ -794,6 +822,31 @@ function drawPoseOnCanvas(ctx, lms, W, H) {
 }
 
 // --- Live overlay on video ---
+function drawLiveOverlay(currentTime) {
+  if (!analysisData) return;
+  const vid = document.getElementById('videoPlayer');
+  const canvas = document.getElementById('overlayCanvas');
+  if (!canvas || !canvas.width) return;
+  const ctx = canvas.getContext('2d');
+  // Only draw phase name in top-left — skeleton is drawn by MediaPipe
+  if (overlayState.errors && analysisData.phases) {
+    const active = analysisData.phases.find((p, i) => {
+      const selFrames = analysisData._selectedFrames || [];
+      const start = selFrames[i]?.timestamp ?? (i * (vid.duration||2) / Math.max(analysisData.phases.length-1,1));
+      const next = selFrames[i+1]?.timestamp ?? ((i+1) * (vid.duration||2) / Math.max(analysisData.phases.length-1,1));
+      return currentTime >= start && currentTime < next;
+    });
+    if (active) {
+      const col = scoreColor(active.score);
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(8, 8, 160, 26);
+      ctx.fillStyle = col;
+      ctx.font = '500 12px system-ui';
+      ctx.fillText(`${active.position||''} ${active.name} · ${active.score}/100`, 14, 25);
+    }
+  }
+}
+
 function renderReport(d) {
   document.getElementById('reportSection').style.display = 'flex';
 
@@ -845,23 +898,32 @@ function renderP1P10Nav(phases) {
   const nav = document.getElementById('p1p10Nav');
   if (!nav) return;
   nav.innerHTML = '';
+  const selectedFrames = analysisData?._selectedFrames || [];
+  const vid = document.getElementById('videoPlayer');
+  const duration = vid.duration || 2;
+
   phases.forEach((p, i) => {
     const col = scoreColor(p.score);
+    // Use actual frame timestamp if available
+    const actualTs = selectedFrames[i]?.timestamp ?? (i * duration / Math.max(phases.length-1, 1));
     const btn = document.createElement('button');
     btn.style.cssText = `font-size:9px;font-weight:600;padding:3px 6px;border-radius:6px;border:1.5px solid ${col};background:transparent;color:${col};cursor:pointer;font-family:inherit;transition:all .15s;`;
     btn.textContent = p.position || `P${i+1}`;
-    btn.title = `${p.name} · Skor ${p.score}`;
+    btn.title = `${p.name} · Skor ${p.score} · ${fmtTime(actualTs)}`;
+    btn.dataset.ts = actualTs;
     btn.onmouseover = () => btn.style.background = col + '22';
-    btn.onmouseout = () => btn.style.background = 'transparent';
+    btn.onmouseout = () => { if (!btn.dataset.active) btn.style.background = 'transparent'; };
     btn.onclick = () => {
-      const vid = document.getElementById('videoPlayer');
-      const ts = p.timestamp || (i * (vid.duration||2) / 9);
-      vid.currentTime = ts;
-      document.getElementById('phaseInfo').textContent = `${p.position||''} ${p.name} · Skor ${p.score} (${scoreLabel(p.score)})`;
-      // Highlight active button
-      nav.querySelectorAll('button').forEach(b => b.style.opacity = '0.5');
+      vid.currentTime = actualTs;
+      vid.pause();
+      document.getElementById('playBtn').textContent = '▶';
+      document.getElementById('phaseInfo').textContent = `${p.position||''} ${p.name} · Skor ${p.score} (${scoreLabel(p.score)}) · ${fmtTime(actualTs)}`;
+      nav.querySelectorAll('button').forEach(b => { b.style.opacity='0.5'; b.style.background='transparent'; delete b.dataset.active; });
       btn.style.opacity = '1';
       btn.style.background = col + '33';
+      btn.dataset.active = '1';
+      // Run MediaPipe on this frame
+      setTimeout(() => runMediaPipeOnFrame(vid), 200);
     };
     nav.appendChild(btn);
   });
@@ -945,25 +1007,130 @@ function toggleOverlay(key, btn) {
 }
 
 let poseLoopActive = false;
+let _poseRunning = false;
+
+function getVideoRenderedRect(vid) {
+  // Calculate actual rendered size of video (respecting object-fit: contain)
+  const vW = vid.videoWidth || 640;
+  const vH = vid.videoHeight || 360;
+  const cW = vid.clientWidth;
+  const cH = vid.clientHeight;
+  const ratio = Math.min(cW / vW, cH / vH);
+  const rW = vW * ratio;
+  const rH = vH * ratio;
+  const rX = (cW - rW) / 2;
+  const rY = (cH - rH) / 2;
+  return { x: rX, y: rY, w: rW, h: rH };
+}
+
 async function runMediaPipeOnFrame(vid) {
-  if (vid.paused || vid.ended) {
-    // For paused video, run once
-    const canvas = document.getElementById('overlayCanvas');
-    if (!canvas || !canvas.width) return;
-    canvas.width = vid.clientWidth || vid.videoWidth || 640;
-    canvas.height = vid.clientHeight || vid.videoHeight || 360;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawLiveOverlay(vid.currentTime);
-    try {
-      const pose = await getPoseInstance();
-      pose.onResults(results => {
-        if (results.poseLandmarks) {
-          drawPoseOnCanvas(ctx, results.poseLandmarks, canvas.width, canvas.height);
-        }
-      });
-      await pose.send({ image: vid });
-    } catch(e) { /* MediaPipe not available or failed */ }
+  if (_poseRunning) return;
+  _poseRunning = true;
+  const canvas = document.getElementById('overlayCanvas');
+  if (!canvas) { _poseRunning = false; return; }
+
+  // Match canvas to video container size
+  canvas.width = vid.clientWidth || 640;
+  canvas.height = vid.clientHeight || 360;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw live overlay text first
+  drawLiveOverlay(vid.currentTime);
+
+  try {
+    const pose = await getPoseInstance();
+    pose.onResults(results => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawLiveOverlay(vid.currentTime);
+      if (results.poseLandmarks) {
+        // Draw pose scaled to actual rendered video area (not full canvas)
+        const rect = getVideoRenderedRect(vid);
+        drawPoseOnCanvasRect(ctx, results.poseLandmarks, rect);
+      }
+      _poseRunning = false;
+    });
+    await pose.send({ image: vid });
+  } catch(e) {
+    _poseRunning = false;
+  }
+}
+
+// Draw pose scaled to a specific rect (handles object-fit: contain)
+function drawPoseOnCanvasRect(ctx, lms, rect) {
+  const { x: rx, y: ry, w: rw, h: rh } = rect;
+  function lmPos(i) {
+    return { x: rx + lms[i].x * rw, y: ry + lms[i].y * rh };
+  }
+  const lw = Math.max(1.5, rw * 0.004);
+
+  if (overlayState.skeleton) {
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = 'rgba(96,165,250,0.9)';
+    CONNECTIONS.forEach(([i,j]) => {
+      if (!lms[i] || !lms[j]) return;
+      const a = lmPos(i), b = lmPos(j);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    });
+    KEY_JOINTS.forEach(i => {
+      if (!lms[i]) return;
+      const p = lmPos(i);
+      const r = Math.max(3, rw * 0.008);
+      ctx.fillStyle = '#4ade80'; ctx.strokeStyle = 'white';
+      ctx.lineWidth = Math.max(1, rw * 0.002);
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    });
+  }
+
+  if (overlayState.lines && lms[11] && lms[12] && lms[23] && lms[24]) {
+    const ls = lmPos(11), rs = lmPos(12);
+    const lh = lmPos(23), rh2 = lmPos(24);
+    const midS = {x:(ls.x+rs.x)/2, y:(ls.y+rs.y)/2};
+    const midH = {x:(lh.x+rh2.x)/2, y:(lh.y+rh2.y)/2};
+    ctx.strokeStyle = 'rgba(251,191,36,0.8)';
+    ctx.lineWidth = Math.max(1.5, rw * 0.003);
+    ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(midS.x,midS.y); ctx.lineTo(midH.x,midH.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ls.x,ls.y); ctx.lineTo(rs.x,rs.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  if (overlayState.angles) {
+    const anglePairs = [
+      { joints:[13,11,23], label:'bahu kiri' },
+      { joints:[14,12,24], label:'bahu kanan' },
+      { joints:[11,13,15], label:'siku kiri' },
+      { joints:[12,14,16], label:'siku kanan' },
+      { joints:[11,23,25], label:'hip kiri' },
+    ];
+    const fs = Math.max(9, rw * 0.028);
+    ctx.font = `500 ${fs}px system-ui`;
+    anglePairs.forEach(({ joints:[a,b,c] }) => {
+      if (!lms[a]||!lms[b]||!lms[c]) return;
+      const pa = lmPos(a), pb = lmPos(b), pc = lmPos(c);
+      const angle = calcAngle3(pa, pb, pc);
+      const txt = `${angle}°`;
+      const tw = ctx.measureText(txt).width;
+      const tx = Math.min(Math.max(pb.x - tw/2, rx+2), rx+rw-tw-4);
+      const ty = pb.y > ry+rh*0.75 ? pb.y - 10 : pb.y + fs + 4;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(tx-2, ty-fs+1, tw+8, fs+4);
+      ctx.fillStyle = '#facc15';
+      ctx.fillText(txt, tx+2, ty);
+    });
+  }
+
+  if (overlayState.errors) {
+    // Highlight error joints in red if any angles are bad
+    const errorJoints = [14, 16]; // right elbow, right wrist as example
+    errorJoints.forEach(i => {
+      if (!lms[i]) return;
+      const p = lmPos(i);
+      const r = Math.max(5, rw * 0.015);
+      ctx.strokeStyle = 'rgba(239,68,68,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.stroke();
+    });
   }
 }
 
