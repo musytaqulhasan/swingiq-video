@@ -337,18 +337,19 @@ async function runFullAnalysis() {
     const localUrl = URL.createObjectURL(videoFile);
     loadVideoPlayer(localUrl);
 
-    // Wait for video metadata to load
+    // Wait for video to be fully ready
+    const vid = document.getElementById('videoPlayer');
     await new Promise(resolve => {
-      const vid = document.getElementById('videoPlayer');
-      if (vid.readyState >= 1) { resolve(); return; }
-      vid.onloadedmetadata = resolve;
+      if (vid.readyState >= 3) { resolve(); return; }
+      vid.oncanplaythrough = resolve;
+      vid.onloadeddata = resolve;
+      setTimeout(resolve, 3000); // fallback timeout
     });
 
-    // Step 3: Extract 30 frames evenly for detection
-    setStatus('Mengextract 30 frame untuk deteksi posisi P1–P10...', 'run');
-    const vid = document.getElementById('videoPlayer');
-    const allFrames = await extractFrames(vid, 30);
-    addMsg('ai', `30 frame berhasil diextract dari video ${fmtTime(vid.duration||0)}.`);
+    // Step 3: Extract frames - use fewer frames (10) for reliability
+    setStatus('Mengextract frame dari video...', 'run');
+    const allFrames = await extractFrames(vid, 10);
+    addMsg('ai', `${allFrames.length} frame berhasil diextract dari video ${fmtTime(vid.duration||0)}.`);
 
     // Step 4: Auto-assign P1-P10 evenly (no detect API call needed)
     setStatus('Memetakan P1–P10...', 'run');
