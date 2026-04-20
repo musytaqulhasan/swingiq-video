@@ -675,6 +675,80 @@ function drawPoseOnCanvas(ctx, lms, W, H) {
 }
 
 // --- Live overlay on video ---
+function renderReport(d) {
+  document.getElementById('reportSection').style.display = 'flex';
+
+  // Overall score
+  const oNum = document.getElementById('overallNum');
+  oNum.textContent = d.overall_score;
+  oNum.style.color = scoreColor(d.overall_score);
+
+  // Phase dashboard
+  renderPhaseDash(d.phases || []);
+
+  // Score grid
+  const sg = document.getElementById('scoreGrid'); sg.innerHTML = '';
+  (d.phases || []).forEach(p => {
+    const cls = scoreClass(p.score), col = scoreColor(p.score);
+    sg.innerHTML += `<div class="score-card ${cls}">
+      <div style="font-size:9px;font-weight:600;color:${col};margin-bottom:1px;">${p.position||''}</div>
+      <div class="sc-name">${p.name}</div>
+      <div class="sc-val" style="color:${col};">${p.score}</div>
+      <div class="sc-note">${p.note||''}</div>
+      <div class="range-track"><div class="range-marker" style="left:${p.score}%;"></div></div>
+    </div>`;
+  });
+
+  // Angles - sorted worst first
+  const sorted = [...(d.angles||[])].sort((a,b) => {
+    const o={bad:0,warn:1,good:2}; return (o[a.status]||1)-(o[b.status]||1);
+  });
+  renderAngles(sorted);
+
+  // Insight
+  const ins = document.getElementById('insightBox');
+  ins.innerHTML = `<strong>Coach insight:</strong> ${d.insight||d.summary}`;
+  ins.style.display = 'block';
+
+  // Drill cards (auto-generate)
+  renderDrillCards();
+
+  // Radar chart
+  if (d.radar) renderRadar(d.radar, d.overall_score);
+
+  addMsg('ai', `<strong>Analisa P1–P10 selesai!</strong> Skor overall: <strong>${d.overall_score}/100</strong> (${scoreLabel(d.overall_score)})<br><br>${d.summary}`);
+}
+
+function renderPhaseDash(phases) {
+  const dash = document.getElementById('phaseDash');
+  if (!dash) return;
+  dash.innerHTML = '';
+  const SWING_ORDER = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
+  const sorted = phases.slice().sort((a,b) => {
+    const ia = SWING_ORDER.indexOf(a.name), ib = SWING_ORDER.indexOf(b.name);
+    return (ia===-1?99:ia)-(ib===-1?99:ib);
+  });
+  sorted.forEach(p => {
+    const cls = scoreClass(p.score);
+    const lbl = scoreLabel(p.score);
+    const item = document.createElement('div'); item.className = 'pd-item';
+    item.innerHTML = `
+      <div class="pd-icon ${cls}">
+        <svg class="pd-svg" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="18" cy="5" r="4" fill="#6b7280"/>
+          <line x1="18" y1="9" x2="18" y2="28" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="18" y1="28" x2="11" y2="44" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="18" y1="28" x2="25" y2="44" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="12" y1="16" x2="6" y2="26" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+          <line x1="24" y1="16" x2="30" y2="26" stroke="#6b7280" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="pd-label ${cls}">${lbl}</div>
+      <div class="pd-name">${p.position||''} ${p.name}</div>`;
+    dash.appendChild(item);
+  });
+}
+
 function updateActivePhase(currentTime) {
   if (!analysisData?.phases) return;
   const segs = document.querySelectorAll('.phase-seg');
@@ -720,6 +794,69 @@ function toggleOverlay(key, btn) {
 }
 
 // --- Drill generation ---
+function renderAngles(angles) {
+  const ar = document.getElementById('angleRows'); ar.innerHTML = '';
+  const toShow = showingAllAngles ? angles : angles.slice(0,3);
+  toShow.forEach(a => {
+    const col = a.status==='good'?'#16a34a':a.status==='bad'?'#dc2626':'#2563eb';
+    const item = document.createElement('div'); item.className = 'angle-item';
+    item.innerHTML = `<div class="angle-hdr" onclick="const d=this.nextElementSibling;d.classList.toggle('open');this.querySelector('.chv').style.transform=d.classList.contains('open')?'rotate(180deg)':'';">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+        <span class="angle-phase">${a.position||a.phase||''}</span>
+        <span style="font-size:12px;font-weight:500;">${a.area}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <div style="text-align:right;">
+          <div style="font-size:12px;font-weight:500;color:${col};">${a.actual}</div>
+          <div style="font-size:10px;color:var(--muted);">ideal ${a.ideal}</div>
+        </div>
+        <span class="pill ${a.status}">${a.label}</span>
+        <span class="chv" style="font-size:10px;color:var(--muted);transition:transform .2s;">▼</span>
+      </div>
+    </div><div class="angle-detail">${a.impact||''}</div>`;
+    ar.appendChild(item);
+  });
+  const sm = document.getElementById('showMore');
+  if (sm) { sm._angles = angles; sm.textContent = showingAllAngles ? '− Sembunyikan' : `+ Lihat ${Math.max(0,angles.length-3)} lainnya`; }
+}
+
+function toggleAngles() { showingAllAngles=!showingAllAngles; renderAngles(document.getElementById('showMore')._angles||[]); }
+
+let radarChartInstance = null;
+function renderRadar(r, overallScore) {
+  const card = document.getElementById('radarCard');
+  if (!card) return;
+  card.style.display = 'block';
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  if (radarChartInstance) radarChartInstance.destroy();
+
+  let targetVal, targetLabel, targetSolid, targetBg;
+  if (overallScore >= 90) {
+    targetVal=95; targetLabel='Target Pro (95)'; targetSolid='#16a34a'; targetBg='rgba(22,163,74,0.06)';
+  } else if (overallScore >= 70) {
+    targetVal=85; targetLabel='Target Advance (85)'; targetSolid='#2563eb'; targetBg='rgba(37,99,235,0.06)';
+  } else {
+    targetVal=70; targetLabel='Target Advance (70)'; targetSolid='#dc2626'; targetBg='rgba(220,38,38,0.06)';
+  }
+
+  const legendEl = document.getElementById('radarLegend');
+  if (legendEl) legendEl.innerHTML = `
+    <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);"><span style="width:10px;height:3px;background:#111827;border-radius:2px;display:inline-block;"></span>Swing kamu</span>
+    <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);"><span style="width:10px;height:3px;background:${targetSolid};border-radius:2px;display:inline-block;"></span>${targetLabel}</span>`;
+
+  radarChartInstance = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Setup','Backswing','Power','Impact','Follow Through','Keseimbangan'],
+      datasets: [
+        { label:'Swing kamu', data:[r.setup,r.backswing,r.power,r.impact,r.follow_through,r.balance], borderColor:'#111827', backgroundColor:'rgba(17,24,39,0.08)', borderWidth:2, pointBackgroundColor:'#111827', pointRadius:4 },
+        { label:targetLabel, data:[targetVal,targetVal,targetVal,targetVal,targetVal,targetVal], borderColor:targetSolid, backgroundColor:targetBg, borderWidth:1.5, pointBackgroundColor:targetSolid, pointRadius:3, borderDash:[4,3] }
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{r:{min:0,max:100,ticks:{stepSize:25,font:{size:10},color:'#9ca3af',backdropColor:'transparent'},grid:{color:'rgba(156,163,175,0.15)'},angleLines:{color:'rgba(156,163,175,0.15)'},pointLabels:{font:{size:11},color:'#6b7280'}}}}
+  });
+}
+
 function renderDrillCards() {
   const dg = document.getElementById('drillGrid'); dg.innerHTML = '';
   drillDefs.forEach((d,i) => {
