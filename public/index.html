@@ -579,7 +579,20 @@ async function runFullAnalysis() {
     videoUrl = uploadedUrl;
 
     // Step 2: Load video in player
-    const localUrl = URL.createObjectURL(videoFile);
+    // Use FileReader for iOS Safari compatibility (.mov files)
+    const localUrl = await new Promise((resolve, reject) => {
+      // Try blob URL first (faster)
+      try {
+        const blobUrl = URL.createObjectURL(videoFile);
+        resolve(blobUrl);
+      } catch(e) {
+        // Fallback to FileReader data URL for iOS
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(videoFile);
+      }
+    });
     loadVideoPlayer(localUrl);
 
     // Wait for video to be fully ready
@@ -588,7 +601,8 @@ async function runFullAnalysis() {
       if (vid.readyState >= 3) { resolve(); return; }
       vid.oncanplaythrough = resolve;
       vid.onloadeddata = resolve;
-      setTimeout(resolve, 3000); // fallback timeout
+      vid.onerror = resolve; // don't hang on error
+      setTimeout(resolve, 5000); // increased fallback timeout for iOS
     });
 
     // Step 3: Extract 20 frames evenly from video
@@ -674,8 +688,12 @@ async function uploadToCloudinary(file) {
 function loadVideoPlayer(src) {
   const vid = document.getElementById('videoPlayer');
   vid.src = src;
+  vid.setAttribute('playsinline', ''); // Required for iOS inline playback
+  vid.setAttribute('webkit-playsinline', ''); // Older iOS
+  vid.muted = false;
   vid.ontimeupdate = updateVideoProgress;
   vid.onended = () => document.getElementById('playBtn').textContent = '▶';
+  vid.onerror = (e) => console.warn('Video load error:', e);
 }
 
 function togglePlay() {
@@ -712,19 +730,41 @@ function seekVideo(e) {
 
 // Extract N frames evenly from video
 async function extractFrames(videoEl, count) {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const frames = [];
     const duration = videoEl.duration || 4;
+    if (!duration || isNaN(duration)) {
+      reject(new Error('Video belum siap — durasi tidak terbaca. Coba tunggu sebentar lalu klik Analisa lagi.'));
+      return;
+    }
     const interval = duration / (count + 1);
     let captured = 0;
+    let attempts = 0;
     const canvas = document.createElement('canvas');
     canvas.width = 480; canvas.height = 270;
     const ctx = canvas.getContext('2d');
 
     function captureAt(time) {
+      attempts = 0;
       videoEl.currentTime = Math.min(time, duration - 0.05);
+
+      const seekTimeout = setTimeout(() => {
+        // Timeout — try draw anyway
+        tryDraw();
+      }, 3000);
+
       videoEl.onseeked = () => {
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        clearTimeout(seekTimeout);
+        tryDraw();
+      };
+
+      function tryDraw() {
+        try {
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        } catch(e) {
+          ctx.fillStyle = '#1a1a1a';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
         const base64 = canvas.toDataURL('image/jpeg', 0.65).split(',')[1];
         frames.push({ base64, timestamp: parseFloat(time.toFixed(3)) });
         captured++;
@@ -733,7 +773,7 @@ async function extractFrames(videoEl, count) {
         } else {
           resolve(frames);
         }
-      };
+      }
     }
     captureAt(interval);
   });
