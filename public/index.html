@@ -568,32 +568,45 @@ async function detectP1P10Visual(frames) {
 
   const prompt = `You are an expert golf swing analyzer. I will show you ${frames.length} sequential frames from a golf swing video.
 ${viewContext}
-Your task: identify which frame BEST matches each of these 10 golf swing positions based on the VISUAL body/club position you see:
 
-P1 - Setup/Address: Golfer standing upright, club at address position near ball, weight balanced
-P2 - Takeaway: Club moving away from ball, still low to ground, hands around hip height  
-P3 - Backswing: Club shaft around horizontal, lead arm starting to fold, shoulders turning
-P4 - Top of Backswing: Club at highest point, lead arm horizontal or above, max shoulder turn, back facing target
-P5 - Start Downswing: Club starting to come down, hips beginning to shift toward target, transition
-P6 - Shaft Parallel Down (Lag): Club shaft parallel to ground on way down, wrist lag maintained
-P7 - Impact: Club at ball contact point, arms extended, hips open to target, head behind ball
-P8 - Early Follow Through: Club past impact, arms extending, chest starting to face target
-P9 - Late Follow Through: Club around horizontal on follow through side, body mostly rotated
-P10 - Finish: Full rotation complete, weight fully on lead foot, club behind head/back
+Your task: identify which frame BEST matches each of the 10 golf swing positions below.
+Study ALL frames carefully — use CLUB/SHAFT position as the primary cue.
 
-CRITICAL RULES:
-- Base your choice ONLY on what you visually see in each frame
-- Each position must use a DIFFERENT frame index
-- Order must be chronological: P1 index < P2 index < ... < P10 index  
-- If you cannot see a clear distinction between two consecutive positions, pick the closest match
-- For fast phases (P5-P7 downswing/impact), multiple positions may be within 1-2 frames of each other
+POSITION DEFINITIONS:
+P1 - Setup/Address: Golfer stationary at address. Club grounded at ball. No movement yet.
+P2 - Takeaway: Club just started moving back. Club head BELOW hip height, shaft near-horizontal LOW. Wrists not yet hinged.
+P3 - Backswing: Club shaft ~HORIZONTAL going back at hip-to-shoulder height (9 o'clock). Lead arm mostly straight.
+P4 - Top of Backswing: Club at HIGHEST point. Lead arm at or above shoulder. Max shoulder turn. Wrists fully hinged. Back facing target.
+P5 - Transition/Start Downswing: Club just begins dropping from top. Still above shoulder height. Hips starting to shift target-ward.
+P6 - Shaft Parallel Down (Lag): Club shaft HORIZONTAL again on DOWNSWING. Hands at hip height. Wrist lag visible. This is BEFORE impact.
+P7 - Impact: Club head at the ball. Arms extended. Shaft slight forward lean. Hips clearly open. Head still behind ball.
+P8 - Early Follow Through: Club passed impact, below shoulder height on follow-through side. Arms extending forward.
+P9 - Late Follow Through: Club shaft horizontal on FOLLOW-THROUGH side (mirror of P3). Body mostly rotated. Weight on lead foot.
+P10 - Finish: Swing complete. Club behind head/back. Full weight on lead foot. Fully facing target.
 
-Respond ONLY with a raw JSON array, no markdown, no explanation:
+SHAFT HEIGHT SEQUENCE (use this to distinguish similar-looking frames):
+P2 = shaft LOW (below hips) going back
+P3 = shaft MID (hip/shoulder) going back  
+P4 = shaft HIGH (above shoulder) at top
+P5 = shaft HIGH coming down
+P6 = shaft MID (hip height) coming down — this is AFTER P5, BEFORE P7
+P7 = shaft at ball (impact)
+P8 = shaft LOW going forward
+P9 = shaft MID going forward
+P10 = shaft HIGH at finish
+
+RULES:
+- Strictly chronological: frame(P1) < frame(P2) < ... < frame(P10)
+- P5-P7 happen very fast, may be 1-2 frames apart
+- Each position uses a DIFFERENT frame
+- P1 = first frames, P10 = last frames
+
+Return ONLY raw JSON array:
 [
-  {"position":"P1","name":"Setup","frame_index":0,"confidence":"high","visual_cue":"club at address"},
-  {"position":"P2","name":"Takeaway","frame_index":2,"confidence":"high","visual_cue":"club low and back"},
+  {"position":"P1","name":"Setup","frame_index":0,"confidence":"high","visual_cue":"club grounded at ball"},
+  {"position":"P2","name":"Takeaway","frame_index":2,"confidence":"high","visual_cue":"club below hips moving back"},
   ...all 10 positions...
-]`;
+]`
 
   const res = await fetch('/api/proxy', {
     method: 'POST',
@@ -602,7 +615,7 @@ Respond ONLY with a raw JSON array, no markdown, no explanation:
       service: 'chat',
       payload: {
         model: 'gpt-4o',
-        max_tokens: 600,
+        max_tokens: 800,
         messages: [{
           role: 'user',
           content: [...imageContent, { type: 'text', text: prompt }]
