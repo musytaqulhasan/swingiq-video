@@ -756,6 +756,9 @@ async function runFullAnalysis() {
     // Step 6: Full analysis — send 10 frames to analyze API
     setStatus('Menganalisa 10 posisi swing P1–P10...', 'run');
     const tid = addTyping();
+    console.log("FRAMES DIKIRIM:", selectedFrames.length);
+    console.log("VIEW ANGLE DIKIRIM:", selectedView);
+    console.log("POSITIONS DIKIRIM:", positions.length);
     const analyzeRes = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
