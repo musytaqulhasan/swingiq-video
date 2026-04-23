@@ -106,6 +106,9 @@ export default async function handler(req, res) {
   if (!OPENAI_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
   const { frames, positions, viewAngle } = req.body;
+  console.log("TOTAL FRAMES MASUK:", frames?.length);
+  console.log("VIEW ANGLE:", viewAngle);
+  console.log("POSITIONS:", positions?.length);
   if (!frames?.length) return res.status(400).json({ error: 'No frames provided' });
 
   try {
