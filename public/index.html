@@ -727,7 +727,7 @@ async function runFullAnalysis() {
 
     // Step 3: Extract 20 frames evenly from video
     setStatus('Mengextract 20 frame dari video...', 'run');
-    const allFrames = await extractFrames(vid, 20);
+    const allFrames = await extractFrames(vid, 25); // 🔥 25 frames untuk deteksi P1-P10 lebih akurat
     addMsg('ai', `${allFrames.length} frame diextract dari video ${fmtTime(vid.duration||0)}.`);
 
     // Step 4: GPT-4o visually detect P1-P10 from actual frames
