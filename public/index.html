@@ -1181,21 +1181,37 @@ function renderReport(d) {
   });
   renderAngles(sorted);
 
-  // Insight
+  // Insight — support both old field names and new coach_insight
   const ins = document.getElementById('insightBox');
-  ins.innerHTML = `<strong>Coach insight:</strong> ${d.insight||d.summary}`;
+  const insightText = d.coach_insight || d.insight || d.summary || 'Analisa selesai.';
+  ins.innerHTML = `<strong>Coach insight:</strong> ${insightText}`;
   ins.style.display = 'block';
 
   // Drill cards (auto-generate)
   renderDrillCards();
 
-  // Radar chart
-  if (d.radar) renderRadar(d.radar, d.overall_score);
+  // Radar chart — use d.radar if present, else build from phases
+  if (d.radar) {
+    renderRadar(d.radar, d.overall_score);
+  } else if (d.phases && d.phases.length >= 6) {
+    const phaseMap = {};
+    d.phases.forEach(p => { phaseMap[p.position] = p.score || 0; });
+    const radar = {
+      setup:          phaseMap['P1'] || 0,
+      backswing:      Math.round(((phaseMap['P2']||0)+(phaseMap['P3']||0)+(phaseMap['P4']||0))/3),
+      power:          Math.round(((phaseMap['P5']||0)+(phaseMap['P6']||0))/2),
+      impact:         phaseMap['P7'] || 0,
+      follow_through: Math.round(((phaseMap['P8']||0)+(phaseMap['P9']||0))/2),
+      balance:        phaseMap['P10'] || 0
+    };
+    renderRadar(radar, d.overall_score);
+  }
 
   // Build P1-P10 navigation
   renderP1P10Nav(d.phases || []);
 
-  addMsg('ai', `<strong>Analisa P1–P10 selesai!</strong> Skor overall: <strong>${d.overall_score}/100</strong> (${scoreLabel(d.overall_score)})<br><br>${d.summary}`);
+  const summaryText = d.coach_insight || d.summary || '';
+  addMsg('ai', `<strong>Analisa P1–P10 selesai!</strong> Skor overall: <strong>${d.overall_score}/100</strong> (${scoreLabel(d.overall_score)})<br><br>${summaryText}`);
 }
 
 function renderP1P10Nav(phases) {
