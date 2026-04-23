@@ -14,93 +14,84 @@ function computeWristSpeed(frames) {
   return speeds;
 }
 
-// ====== SHAFT (PROXY via elbow-wrist) ======
+// ====== SHAFT ANGLE (proxy via elbow-wrist) ======
 function estimateShaftAngle(frame) {
   const wrist = frame.right_wrist;
   const elbow = frame.right_elbow;
   if (!wrist || !elbow) return null;
-
   const dx = wrist.x - elbow.x;
   const dy = wrist.y - elbow.y;
-
   const angleRad = Math.atan2(dy, dx);
-  return Math.abs(angleRad * 180 / Math.PI); // 0 = horizontal, 90 = vertical
+  return Math.abs(angleRad * 180 / Math.PI);
 }
 
 // ====== EVENT DETECTION ======
 function detectP4(wristSpeed) {
   for (let i = 1; i < wristSpeed.length - 1; i++) {
-    if (wristSpeed[i] < wristSpeed[i - 1] && wristSpeed[i] < wristSpeed[i + 1]) {
-      return i;
-    }
+    if (wristSpeed[i] < wristSpeed[i - 1] && wristSpeed[i] < wristSpeed[i + 1]) return i;
   }
   return 0;
 }
 
-// NEW: P6 (shaft horizontal)
 function detectP6(frames) {
   for (let i = 0; i < frames.length; i++) {
     const angle = estimateShaftAngle(frames[i]);
-    if (angle !== null && angle < 30) {
-      return i;
-    }
+    if (angle !== null && angle < 30) return i;
   }
   return null;
 }
 
-// OLD: speed-based
 function detectP7Speed(wristSpeed) {
   let max = 0, index = 0;
-  wristSpeed.forEach((v, i) => {
-    if (v > max) {
-      max = v;
-      index = i;
-    }
-  });
+  wristSpeed.forEach((v, i) => { if (v > max) { max = v; index = i; } });
   return index;
 }
 
-// NEW: shaft-based
 function detectP7Shaft(frames) {
-  let bestIndex = 0;
-  let bestScore = 999;
-
+  let bestIndex = 0, bestScore = 999;
   frames.forEach((f, i) => {
     const angle = estimateShaftAngle(f);
     if (angle === null) return;
-
-    const diff = Math.abs(angle - 80); // near vertical
-    if (diff < bestScore) {
-      bestScore = diff;
-      bestIndex = i;
-    }
+    const diff = Math.abs(angle - 80);
+    if (diff < bestScore) { bestScore = diff; bestIndex = i; }
   });
-
   return bestIndex;
 }
 
-// ====== VIEW CONTEXT (UNCHANGED) ======
+// ====== VIEW CONTEXT ======
 function buildViewContext(viewAngle) {
   if (viewAngle === 'dtl') {
     return {
-      cameraDesc: `Camera angle: DOWN THE LINE (DTL)`,
-      focusAreas: `Fokus: swing plane, club path, spine angle`,
-      angleMetrics: ['Swing plane', 'Spine angle', 'Shaft lean']
+      cameraDesc: `Camera angle: DOWN THE LINE (DTL) — kamera di belakang pemain, searah target line.
+Dari sudut ini terlihat jelas: club path, swing plane, spine angle, shaft lean, wrist conditions, trail elbow.`,
+      focusAreas: `Untuk sudut DTL, fokus analisa:
+1. SWING PLANE: on-plane, over-the-top, atau under-plane
+2. SPINE ANGLE: konsisten P1-P7, early extension/sway
+3. CLUB PATH: sesuai target line atau in-to-out/out-to-in
+4. SHAFT LEAN: positif di P7 (impact)
+5. TRAIL ELBOW: tuck atau flying di P4/P6
+6. WRIST: flat, cupped, atau bowed di P4`,
+      angleMetrics: ['Swing plane angle (DTL)', 'Spine tilt at setup vs impact', 'Trail elbow at P4', 'Shaft lean at impact (P7)', 'Wrist condition at P4', 'Hip hinge depth at P1']
     };
   }
-
   if (viewAngle === 'face-on') {
     return {
-      cameraDesc: `Camera angle: FACE ON`,
-      focusAreas: `Fokus: weight shift, hip rotation, balance`,
-      angleMetrics: ['Hip rotation', 'Weight shift', 'Balance']
+      cameraDesc: `Camera angle: FACE ON — kamera di depan pemain, tegak lurus target line.
+Dari sudut ini terlihat jelas: weight transfer, hip/shoulder tilt, head position, knee flex, reverse pivot.`,
+      focusAreas: `Untuk sudut Face On, fokus analisa:
+1. WEIGHT TRANSFER: berat dari kanan ke kiri saat downswing
+2. HIP TURN & TILT: rotasi dan tilt pinggul P1-P10
+3. SHOULDER TILT: lead shoulder lebih rendah di P4
+4. HEAD POSITION: stabil lateral atau lateral sway
+5. REVERSE PIVOT: berat ke kiri saat backswing (fault)
+6. LEAD KNEE: posisi lutut kiri di P7`,
+      angleMetrics: ['Hip rotation at impact', 'Shoulder tilt at P4', 'Lateral head movement P1 vs P7', 'Weight distribution setup vs impact', 'Lead knee flex at P7', 'Trail side bend at P6']
     };
   }
-
   return {
-    cameraDesc: 'General view',
-    focusAreas: 'General analysis',
-    angleMetrics: ['General']
+    cameraDesc: 'Camera angle: tidak ditentukan.',
+    focusAreas: 'Analisa general semua aspek swing.',
+    angleMetrics: ['Shoulder turn', 'Hip rotation', 'Spine angle', 'Weight transfer', 'Club path', 'Impact position']
   };
 }
 
@@ -108,7 +99,6 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -119,22 +109,19 @@ export default async function handler(req, res) {
   if (!frames?.length) return res.status(400).json({ error: 'No frames provided' });
 
   try {
-    // ====== CORE DETECTION ======
+    // ====== BIOMECHANICS DETECTION ======
     const wristSpeed = computeWristSpeed(frames);
-
     const p4 = detectP4(wristSpeed);
     const p6 = detectP6(frames);
-
     const p7_speed = detectP7Speed(wristSpeed);
     const p7_shaft = detectP7Shaft(frames);
-
-    // COMBINE (IMPORTANT)
     const p7 = Math.round((p7_speed + p7_shaft) / 2);
 
     // ====== VIEW CONTEXT ======
     const viewCtx = buildViewContext(viewAngle);
-    const viewLabel = viewAngle || 'General';
+    const viewLabel = viewAngle === 'dtl' ? 'Down the Line (DTL)' : viewAngle === 'face-on' ? 'Face On' : 'General';
 
+    // ====== BUILD IMAGE CONTENT ======
     const imageContent = frames.slice(0, 10).map((f, idx) => {
       const p = (positions || [])[idx] || { position: `P${idx + 1}`, name: `Position ${idx + 1}` };
       return [
@@ -143,15 +130,73 @@ export default async function handler(req, res) {
       ];
     }).flat();
 
-    const sys = `You are SwingIQ, AI golf coach. Return JSON only.`;
+    // ====== SYSTEM PROMPT WITH COMPLETE JSON SCHEMA ======
+    const sys = `You are SwingIQ, an expert AI golf coach analyzing a golf swing video frame by frame.
 
-    const userPrompt = `Camera: ${viewLabel}
-Detected:
-P4: ${p4}
-P6: ${p6}
-P7: ${p7}
+${viewCtx.cameraDesc}
 
-Analyze swing and return JSON.`;
+${viewCtx.focusAreas}
+
+You will receive 10 images representing positions P1 through P10 of a golf swing.
+You MUST return ONLY a valid JSON object with EXACTLY this structure. No explanation, no markdown, no extra text — just raw JSON:
+
+{
+  "overall_score": <number 0-100>,
+  "view_angle": "${viewLabel}",
+  "coach_insight": "<2-3 kalimat ringkasan coaching spesifik untuk sudut ${viewLabel} dalam Bahasa Indonesia. Sebutkan 1-2 fault utama yang terlihat. WAJIB DIISI, tidak boleh null atau kosong.>",
+  "strengths": ["<kekuatan 1>", "<kekuatan 2>", "<kekuatan 3>"],
+  "improvements": ["<perbaikan 1 spesifik untuk ${viewLabel}>", "<perbaikan 2>", "<perbaikan 3>"],
+  "phases": [
+    { "position": "P1", "name": "Setup/Address", "score": <number 0-100>, "status": "<good|warn|bad>", "feedback": "<feedback dalam Bahasa Indonesia>" },
+    { "position": "P2", "name": "Takeaway", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P3", "name": "Backswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P4", "name": "Top of Backswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P5", "name": "Early Downswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P6", "name": "Late Downswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P7", "name": "Impact", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P8", "name": "Follow Through", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P9", "name": "Release", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P10", "name": "Finish", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" }
+  ],
+  "angle_analysis": [
+    {
+      "phase": "<posisi>",
+      "metric": "<metrik spesifik untuk sudut ${viewLabel}, contoh: ${viewCtx.angleMetrics[0]}>",
+      "value": "<nilai aktual dari video>",
+      "ideal": "<nilai ideal>",
+      "status": "<good|warn|bad>",
+      "detail": "<penjelasan dampak dalam Bahasa Indonesia>"
+    }
+  ],
+  "error_frames": [
+    {
+      "position": "<posisi bermasalah>",
+      "issue": "<nama fault>",
+      "actual_value": "<apa yang terlihat>",
+      "ideal_value": "<yang seharusnya>",
+      "status": "<bad|warn>",
+      "description": "<penjelasan dan cara perbaikan dalam Bahasa Indonesia>"
+    }
+  ]
+}
+
+Rules:
+- coach_insight WAJIB diisi minimum 2 kalimat, TIDAK BOLEH null, undefined, atau kosong.
+- phases HARUS tepat 10 entry (P1 sampai P10).
+- angle_analysis HARUS minimal 5 entry.
+- error_frames: hanya posisi bad/warn. Boleh [] jika swing bagus.
+- Semua teks dalam Bahasa Indonesia.
+- status: HANYA "good", "warn", atau "bad".`;
+
+    const userPrompt = `Sudut kamera: ${viewLabel}
+
+Biomechanics engine mendeteksi:
+- P4 (top of backswing): frame ke-${p4}
+- P6 (shaft parallel down): frame ke-${p6 ?? 'tidak terdeteksi'}
+- P7 (impact): frame ke-${p7} (speed: ${p7_speed}, shaft: ${p7_shaft})
+
+Gunakan sebagai referensi, validasi secara visual dari gambar.
+Analisa semua 10 posisi dan return JSON sesuai schema.`;
 
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -161,7 +206,7 @@ Analyze swing and return JSON.`;
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_tokens: 2000,
+        max_tokens: 3000,
         messages: [
           { role: 'system', content: sys },
           { role: 'user', content: [...imageContent, { type: 'text', text: userPrompt }] }
@@ -178,20 +223,32 @@ Analyze swing and return JSON.`;
     const start = raw.indexOf('{');
     const end = raw.lastIndexOf('}');
     if (start === -1 || end === -1) {
-      return res.status(500).json({ error: 'Invalid JSON from GPT', debug: raw.substring(0, 300) });
+      return res.status(500).json({ error: 'GPT tidak return JSON valid', debug: raw.substring(0, 300) });
     }
 
-    const result = JSON.parse(raw.substring(start, end + 1));
+    let result;
+    try {
+      result = JSON.parse(raw.substring(start, end + 1));
+    } catch (parseErr) {
+      return res.status(500).json({ error: 'JSON parse error: ' + parseErr.message, debug: raw.substring(0, 300) });
+    }
+
+    // ====== SAFETY FALLBACKS ======
+    if (!result.coach_insight) {
+      result.coach_insight = `Analisa swing dari sudut ${viewLabel} selesai. Perhatikan konsistensi posisi dan tempo swing untuk hasil yang lebih baik.`;
+    }
+    if (!Array.isArray(result.phases) || result.phases.length === 0) {
+      return res.status(500).json({ error: 'GPT tidak return phases', debug: JSON.stringify(result).substring(0, 300) });
+    }
+    if (!Array.isArray(result.strengths)) result.strengths = [];
+    if (!Array.isArray(result.improvements)) result.improvements = [];
+    if (!Array.isArray(result.angle_analysis)) result.angle_analysis = [];
+    if (!Array.isArray(result.error_frames)) result.error_frames = [];
+    if (!result.view_angle) result.view_angle = viewLabel;
 
     return res.status(200).json({
       result,
-      debug: {
-        p4,
-        p6,
-        p7,
-        p7_speed,
-        p7_shaft
-      }
+      debug: { p4, p6, p7, p7_speed, p7_shaft }
     });
 
   } catch (err) {
