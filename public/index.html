@@ -828,18 +828,27 @@ async function runFullAnalysis() {
     videoUrl = uploadedUrl;
 
     // Step 2: Load video in player
-    // Use FileReader for iOS Safari compatibility (.mov files)
+    // iOS Safari: .mov files need special handling
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isMov = videoFile.name.toLowerCase().endsWith('.mov');
+
     const localUrl = await new Promise((resolve, reject) => {
-      // Try blob URL first (faster)
-      try {
-        const blobUrl = URL.createObjectURL(videoFile);
-        resolve(blobUrl);
-      } catch(e) {
-        // Fallback to FileReader data URL for iOS
+      if (isIOS || isMov) {
+        // iOS / .mov: always use FileReader data URL (blob URL unreliable)
         const reader = new FileReader();
         reader.onload = e => resolve(e.target.result);
-        reader.onerror = reject;
+        reader.onerror = () => reject(new Error('Gagal membaca file video. Coba format MP4.'));
         reader.readAsDataURL(videoFile);
+      } else {
+        // Desktop / non-mov: blob URL lebih cepat
+        try {
+          resolve(URL.createObjectURL(videoFile));
+        } catch(e) {
+          const reader = new FileReader();
+          reader.onload = e => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(videoFile);
+        }
       }
     });
     loadVideoPlayer(localUrl);
