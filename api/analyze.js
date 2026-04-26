@@ -146,9 +146,21 @@ You MUST return ONLY a valid JSON object with EXACTLY this structure. No explana
 {
   "overall_score": <number 0-100>,
   "view_angle": "${viewLabel}",
-  "coach_insight": "<2-3 kalimat ringkasan coaching spesifik untuk sudut ${viewLabel} dalam Bahasa Indonesia. Sebutkan 1-2 fault utama yang terlihat. WAJIB DIISI, tidak boleh null atau kosong.>",
+
+  "coach_insight": "<2-3 kalimat coaching keseluruhan dalam Bahasa Indonesia. WAJIB DIISI.>",
+
+  "focus_fault": "<nama fault utama yang paling kritis, singkat, max 5 kata. Contoh: Over the Top, Early Release, Reverse Pivot>",
+  "focus_sub": "<1 kalimat: dampak fault ini ke ball flight. Contoh: Ini penyebab bola kamu sering slice ke kanan.>",
+
+  "coach_says": "<2-3 kalimat BAHASA MANUSIA — seperti coach bicara langsung ke pemain. Bukan teknis. Contoh: Di awal swing kamu sudah cukup bagus. Tapi saat downswing, tangan kamu bergerak ke luar, bukan turun ke dalam. Makanya arah bola jadi belok ke kanan.>",
+
+  "why": "<1-2 kalimat penjelasan sederhana KENAPA fault ini terjadi secara biomekanik. Contoh: Bahu kamu terbuka terlalu cepat, sementara pinggul belum sempat rotate. Akibatnya tangan terlempar keluar.>",
+
+  "fix_drill": "<nama drill yang paling relevan untuk fault ini. Pilih dari: Elbow Tuck Drill, Shoulder Turn Drill, Hip Bump Drill, Weight Transfer Drill, Alignment Stick Setup, Hip Hinge Drill, Flat Left Wrist Drill, Swing Plane Drill, Pause at Top Drill, Lag Retention Drill, Impact Bag Drill, Pump Drill, Hip Clearance Drill, Feet Together Drill, Full Finish Drill, Extension Drill>",
+  "fix_feel": "<1 kalimat feel cue — apa yang harus dirasakan pemain saat melakukan drill. Contoh: Turunkan tangan ke dalam, bukan lempar ke depan.>",
+
   "strengths": ["<kekuatan 1>", "<kekuatan 2>", "<kekuatan 3>"],
-  "improvements": ["<perbaikan 1 spesifik untuk ${viewLabel}>", "<perbaikan 2>", "<perbaikan 3>"],
+  "improvements": ["<apa yang terjadi kalau fault ini diperbaiki, bukan teknis tapi hasil nyata. Contoh: Bola akan lebih lurus>", "<Slice berkurang>", "<Jarak bisa nambah 15-25 meter>"],
   "phases": [
     { "position": "P1", "name": "Setup/Address", "score": <number 0-100>, "status": "<good|warn|bad>", "feedback": "<feedback dalam Bahasa Indonesia>" },
     { "position": "P2", "name": "Takeaway", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
@@ -184,7 +196,9 @@ You MUST return ONLY a valid JSON object with EXACTLY this structure. No explana
 }
 
 Rules:
-- coach_insight WAJIB diisi minimum 2 kalimat, TIDAK BOLEH null, undefined, atau kosong.
+- coach_insight, coach_says, why, focus_fault, fix_drill, fix_feel WAJIB semua diisi. TIDAK BOLEH null atau kosong.
+- coach_says harus bahasa manusia natural, bukan bahasa teknis/biomechanics.
+- improvements harus berisi HASIL NYATA yang bisa dirasakan pemain (bukan deskripsi teknis).
 - phases HARUS tepat 10 entry (P1 sampai P10).
 - angle_analysis HARUS minimal 5 entry.
 - error_frames: hanya posisi bad/warn. Boleh [] jika swing bagus.
@@ -244,10 +258,17 @@ Analisa semua 10 posisi dan return JSON sesuai schema.`;
       return res.status(500).json({ error: 'GPT tidak return phases', debug: JSON.stringify(result).substring(0, 300) });
     }
     if (!Array.isArray(result.strengths)) result.strengths = [];
-    if (!Array.isArray(result.improvements)) result.improvements = [];
+    if (!Array.isArray(result.improvements)) result.improvements = ['Konsistensi swing meningkat', 'Ball flight lebih terprediksi', 'Jarak bisa bertambah'];
     if (!Array.isArray(result.angle_analysis)) result.angle_analysis = [];
     if (!Array.isArray(result.error_frames)) result.error_frames = [];
     if (!result.view_angle) result.view_angle = viewLabel;
+    // Fallbacks for new coach fields
+    if (!result.focus_fault) result.focus_fault = result.error_frames[0]?.issue || 'Konsistensi swing';
+    if (!result.focus_sub) result.focus_sub = result.improvements[0] || '';
+    if (!result.coach_says) result.coach_says = result.coach_insight;
+    if (!result.why) result.why = result.error_frames[0]?.description || result.coach_insight;
+    if (!result.fix_drill) result.fix_drill = 'Hip Bump Drill';
+    if (!result.fix_feel) result.fix_feel = 'Fokus pada transisi yang mulus dari backswing ke downswing.';
 
     return res.status(200).json({
       result,
