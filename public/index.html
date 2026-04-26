@@ -41,6 +41,11 @@
 
   /* Video player */
   .player-wrap{position:relative;background:#0a0a0a;border-radius:10px;overflow:hidden;}
+  #cropCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+  .player-wrap.crop-active #videoPlayer{visibility:hidden;}
+  .player-wrap.crop-active #cropCanvas{display:block;}
+  .crop-badge{position:absolute;top:6px;right:6px;background:rgba(37,99,235,0.85);color:white;font-size:9px;font-weight:600;padding:2px 7px;border-radius:8px;display:none;}
+  .player-wrap.crop-active .crop-badge{display:block;}
   .player-wrap video{width:100%;display:block;max-height:320px;object-fit:contain;}
   .overlay-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
   .overlay-controls{display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(0,0,0,0.6);}
@@ -135,6 +140,64 @@
   .insight{background:#fffbeb;border-left:3px solid #d97706;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.65;}
 
   @media(max-width:768px){.main{grid-template-columns:1fr;}.score-grid{grid-template-columns:repeat(2,1fr);}.drill-grid{grid-template-columns:1fr;}}
+
+  /* Coach sections */
+  .coach-focus{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:14px 16px;}
+  .coach-focus-label{font-size:10px;font-weight:600;color:#2563eb;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .coach-focus-fault{font-size:15px;font-weight:600;color:#1e3a8a;margin-bottom:4px;}
+  .coach-focus-sub{font-size:12px;color:#3b82f6;}
+  .coach-says{background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 10px 10px 0;padding:12px 16px;}
+  .coach-says-label{font-size:10px;font-weight:600;color:#d97706;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .coach-says-text{font-size:13px;color:#78350f;line-height:1.7;font-style:italic;}
+  .why-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;}
+  .why-label{font-size:10px;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .why-text{font-size:12px;color:#14532d;line-height:1.65;}
+  .fix-box{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 16px;}
+  .fix-label{font-size:10px;font-weight:600;color:#ea580c;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .fix-drill{font-size:13px;font-weight:600;color:#9a3412;margin-bottom:4px;}
+  .fix-feel{font-size:12px;color:#7c2d12;font-style:italic;line-height:1.6;}
+  .impact-box{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 16px;}
+  .impact-label{font-size:10px;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .impact-items span{display:block;font-size:12px;color:#7f1d1d;line-height:1.9;}
+  .collapsible-header{display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0;user-select:none;}
+  .collapsible-arrow{font-size:12px;color:var(--muted);transition:transform .2s;}
+  .collapsible-arrow.open{transform:rotate(180deg);}
+  .collapsible-body{overflow:hidden;transition:max-height .3s ease;}
+  .collapsible-body.collapsed{max-height:0;}
+  .key-moment{background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;border-left:3px solid var(--border);}
+  .key-moment.bad{border-left-color:#dc2626;}
+  .key-moment.warn{border-left-color:#d97706;}
+  .key-moment-phase{font-size:11px;font-weight:600;color:var(--text);margin-bottom:3px;}
+  .key-moment-desc{font-size:12px;color:var(--muted);line-height:1.55;}
+
+  /* Coach sections */
+  .coach-focus{background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);border:1.5px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:0;}
+  .coach-focus-label{font-size:10px;font-weight:600;color:#2563eb;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .coach-focus-fault{font-size:15px;font-weight:600;color:#1e3a8a;margin-bottom:4px;}
+  .coach-focus-sub{font-size:12px;color:#3b82f6;}
+  .coach-says{background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 10px 10px 0;padding:12px 16px;}
+  .coach-says-label{font-size:10px;font-weight:600;color:#d97706;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .coach-says-text{font-size:13px;color:#78350f;line-height:1.7;font-style:italic;}
+  .why-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px;}
+  .why-label{font-size:10px;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .why-text{font-size:12px;color:#14532d;line-height:1.65;}
+  .fix-box{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 16px;}
+  .fix-label{font-size:10px;font-weight:600;color:#ea580c;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .fix-drill{font-size:13px;font-weight:600;color:#9a3412;margin-bottom:4px;}
+  .fix-feel{font-size:12px;color:#7c2d12;font-style:italic;line-height:1.6;}
+  .impact-box{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px 16px;}
+  .impact-label{font-size:10px;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .impact-items{font-size:12px;color:#7f1d1d;line-height:1.8;}
+  .impact-items span{display:block;}
+  .collapsible-header{display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0;user-select:none;}
+  .collapsible-header:hover{opacity:0.8;}
+  .collapsible-arrow{font-size:12px;color:var(--muted);transition:transform .2s;}
+  .collapsible-arrow.open{transform:rotate(180deg);}
+  .collapsible-body{overflow:hidden;transition:max-height .3s ease;}
+  .collapsible-body.collapsed{max-height:0;}
+  .key-moment{background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:12px;}
+  .key-moment-phase{font-weight:600;color:var(--text);margin-bottom:3px;}
+  .key-moment-desc{color:var(--muted);line-height:1.55;}
 
   /* View angle selector */
   .view-selector{display:flex;gap:10px;margin-top:10px;}
@@ -258,11 +321,14 @@
           <div class="player-wrap">
             <video id="videoPlayer" playsinline></video>
             <canvas id="overlayCanvas" class="overlay-canvas"></canvas>
+            <canvas id="cropCanvas"></canvas>
+            <div class="crop-badge">Auto Crop</div>
             <div class="overlay-controls">
               <button class="tog on" id="togSkeleton" onclick="toggleOverlay('skeleton',this)">Skeleton</button>
               <button class="tog on" id="togAngles" onclick="toggleOverlay('angles',this)">Sudut</button>
               <button class="tog on" id="togLines" onclick="toggleOverlay('lines',this)">Garis acuan</button>
               <button class="tog on" id="togErrors" onclick="toggleOverlay('errors',this)">Error zone</button>
+              <button class="tog on" id="togCrop" onclick="toggleCrop(this)">Auto Crop</button>
             </div>
             <div class="vid-controls">
               <button class="play-btn" id="playBtn" onclick="togglePlay()">▶</button>
@@ -280,59 +346,107 @@
         </div>
       </div>
 
-      <!-- Phase scores -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">Skor per Fase</span></div>
-        <div class="card-body">
-          <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);">
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#dc2626;margin-right:3px;"></span>0–69 Beginner</span>
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#2563eb;margin-right:3px;"></span>70–89 Advance</span>
-            <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#16a34a;margin-right:3px;"></span>90–100 Pro</span>
+      <!-- SECTION 2: TODAY'S FOCUS -->
+      <div class="card" id="focusSection" style="display:none;">
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+          <div class="coach-focus" id="focusBox">
+            <div class="coach-focus-label">🎯 Fokus Utama Kamu</div>
+            <div class="coach-focus-fault" id="focusFault">–</div>
+            <div class="coach-focus-sub" id="focusSub">–</div>
           </div>
-          <div class="score-grid" id="scoreGrid"></div>
-        </div>
-      </div>
 
-      <!-- Angles -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">Area yang Bisa Ditingkatkan</span></div>
-        <div class="card-body" style="padding-bottom:0;">
-          <div id="angleRows"></div>
-          <div class="show-more" id="showMore" onclick="toggleAngles()">+ Lihat semua</div>
-        </div>
-      </div>
-
-      <!-- Error frames with overlay -->
-      <div class="card" id="errorSection" style="display:none;">
-        <div class="card-header"><span class="card-title">Frame Error — Gerakan Bermasalah</span></div>
-        <div class="card-body">
-          <div class="err-grid" id="errorGrid"></div>
-        </div>
-      </div>
-
-      <!-- Coach insight -->
-      <div class="insight" id="insightBox" style="display:none;"></div>
-
-      <!-- Radar chart -->
-      <div class="card" id="radarCard" style="display:none;">
-        <div class="card-header"><span class="card-title">Profil Swing</span></div>
-        <div class="card-body">
-          <div style="position:relative;width:100%;height:240px;">
-            <canvas id="radarChart"></canvas>
+          <!-- SECTION 3: COACH SAYS -->
+          <div class="coach-says" id="coachSaysBox">
+            <div class="coach-says-label">💬 Coach Says</div>
+            <div class="coach-says-text" id="coachSaysText">–</div>
           </div>
-          <div id="radarLegend" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;justify-content:center;"></div>
+
+          <!-- SECTION 4: WHY -->
+          <div class="why-box" id="whyBox">
+            <div class="why-label">🧠 Kenapa Ini Terjadi</div>
+            <div class="why-text" id="whyText">–</div>
+          </div>
+
+          <!-- SECTION 5: FIX -->
+          <div class="fix-box" id="fixBox">
+            <div class="fix-label">🔧 Fix Ini Dulu</div>
+            <div class="fix-drill" id="fixDrill">–</div>
+            <div class="fix-feel" id="fixFeel">–</div>
+          </div>
+
+          <!-- SECTION 6: IMPACT -->
+          <div class="impact-box" id="impactBox">
+            <div class="impact-label">🔥 Kalau Ini Diperbaiki</div>
+            <div class="impact-items" id="impactItems">–</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 7 (COLLAPSIBLE): DETAIL ANALYSIS -->
+      <div class="card">
+        <div class="card-body" style="padding:0 16px;">
+          <div class="collapsible-header" onclick="toggleDetail('detailAnalysis','arrowDetail')">
+            <span style="font-size:13px;font-weight:600;">📊 Lihat Analisa Detail</span>
+            <span class="collapsible-arrow" id="arrowDetail">▼</span>
+          </div>
+          <div class="collapsible-body collapsed" id="detailAnalysis">
+            <div style="padding-bottom:14px;display:flex;flex-direction:column;gap:12px;">
+
+              <!-- Key moments (rewrite of error frames) -->
+              <div>
+                <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🎬 Momen Penting</div>
+                <div id="keyMomentsGrid"></div>
+              </div>
+
+              <!-- Postur badan (rewrite of angles) -->
+              <div>
+                <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">🧍 Postur Badan</div>
+                <div id="angleRows"></div>
+                <div class="show-more" id="showMore" onclick="toggleAngles()">+ Lihat semua</div>
+              </div>
+
+              <!-- Skor per fase (collapsible inside detail) -->
+              <div>
+                <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📈 Analisa Detail per Fase</div>
+                <div style="display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap;font-size:11px;color:var(--muted);">
+                  <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#dc2626;margin-right:3px;"></span>0–69 Beginner</span>
+                  <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#2563eb;margin-right:3px;"></span>70–89 Advance</span>
+                  <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#16a34a;margin-right:3px;"></span>90–100 Pro</span>
+                </div>
+                <div class="score-grid" id="scoreGrid"></div>
+              </div>
+
+              <!-- Consistency overview (radar) -->
+              <div id="radarCard" style="display:none;">
+                <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📊 Consistency Overview</div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Ini gambaran keseluruhan swing kamu</div>
+                <div style="position:relative;width:100%;height:220px;">
+                  <canvas id="radarChart"></canvas>
+                </div>
+                <div id="radarLegend" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;justify-content:center;"></div>
+              </div>
+
+              <!-- Error frames -->
+              <div id="errorSection" style="display:none;">
+                <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">⚠️ Frame Bermasalah</div>
+                <div class="err-grid" id="errorGrid"></div>
+              </div>
+
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Drill illustrations -->
       <div class="card">
-        <div class="card-header">
-          <span class="card-title">Ilustrasi Drill</span>
-        </div>
+        <div class="card-header"><span class="card-title">🔧 Drill yang Disarankan</span></div>
         <div class="card-body">
           <div class="drill-grid" id="drillGrid"></div>
         </div>
       </div>
+
+      <!-- Hidden: insight box (kept for backward compat) -->
+      <div id="insightBox" style="display:none;"></div>
 
     </div>
   </div>
@@ -376,6 +490,8 @@ let frameData = {};
 let overlayState = { skeleton:true, angles:true, lines:true, errors:true };
 let currentPoseResult = null;
 let selectedView = null; // 'dtl' | 'face-on'
+let cropRegion = null;   // { sx, sy, sw, sh } — auto-crop dari golfer bounding box
+let cropEnabled = true;  // toggle crop on/off
 
 const drillDefs = [
   {
@@ -1135,6 +1251,75 @@ function drawPoseOnCanvas(ctx, lms, W, H) {
 }
 
 // --- Live overlay on video ---
+// --- Auto Crop from MediaPipe landmarks ---
+function computeCropFromLandmarks(lms, vidW, vidH) {
+  // Use all visible body landmarks
+  const BODY_LMS = [0,11,12,13,14,15,16,23,24,25,26,27,28,29,30,31,32];
+  const pts = BODY_LMS.map(i => lms[i]).filter(l => l && l.visibility > 0.3);
+  if (pts.length < 4) return null;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  pts.forEach(l => {
+    if (l.x < minX) minX = l.x;
+    if (l.x > maxX) maxX = l.x;
+    if (l.y < minY) minY = l.y;
+    if (l.y > maxY) maxY = l.y;
+  });
+
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+
+  // Adaptive padding — 20% horizontal, 15% top, 35% bottom (club swing space)
+  const padX   = bw * 0.20;
+  const padTop  = bh * 0.15;
+  const padBot  = bh * 0.35; // extra untuk area club di bawah
+
+  let sx = Math.max(0, minX - padX);
+  let ex = Math.min(1, maxX + padX);
+  let sy = Math.max(0, minY - padTop);
+  let ey = Math.min(1, maxY + padBot);
+
+  let sw = ex - sx;
+  let sh = ey - sy;
+
+  // NO forced aspect ratio — follow natural bounding box of the golfer
+  // Just ensure minimum sensible size
+  if (sw < 0.15) { const extra = (0.15 - sw) / 2; sx = Math.max(0, sx-extra); sw = 0.15; }
+  if (sh < 0.20) { const extra = (0.20 - sh) / 2; sy = Math.max(0, sy-extra); sh = 0.20; }
+
+  // Clamp
+  sx = Math.max(0, sx);
+  sy = Math.max(0, sy);
+  sw = Math.min(sw, 1 - sx);
+  sh = Math.min(sh, 1 - sy);
+
+  return {
+    sx: sx * vidW,
+    sy: sy * vidH,
+    sw: sw * vidW,
+    sh: sh * vidH,
+    ratio: sw / sh  // store natural ratio for canvas sizing
+  };
+}
+
+function toggleCrop(btn) {
+  cropEnabled = !cropEnabled;
+  btn.classList.toggle('on', cropEnabled);
+  if (!cropEnabled) cropRegion = null;
+}
+
+// Smoothly lerp crop region to avoid jitter
+function smoothCrop(newCrop) {
+  if (!cropRegion || !newCrop) { cropRegion = newCrop; return; }
+  const alpha = 0.12; // lerp factor — lower = smoother but slower
+  cropRegion = {
+    sx: cropRegion.sx + (newCrop.sx - cropRegion.sx) * alpha,
+    sy: cropRegion.sy + (newCrop.sy - cropRegion.sy) * alpha,
+    sw: cropRegion.sw + (newCrop.sw - cropRegion.sw) * alpha,
+    sh: cropRegion.sh + (newCrop.sh - cropRegion.sh) * alpha,
+  };
+}
+
 function drawLiveOverlay(currentTime) {
   if (!analysisData) return;
   const vid = document.getElementById('videoPlayer');
@@ -1163,7 +1348,7 @@ function drawLiveOverlay(currentTime) {
 function renderReport(d) {
   document.getElementById('reportSection').style.display = 'flex';
 
-  // Show view badge in report header
+  // View badge
   const vb = document.getElementById('viewBadgeReport');
   if (vb && selectedView) {
     vb.textContent = selectedView === 'dtl' ? '📷 Down the Line' : '📷 Face On';
@@ -1178,7 +1363,10 @@ function renderReport(d) {
   // Phase dashboard
   renderPhaseDash(d.phases || []);
 
-  // Score grid
+  // ===== SECTION 2-6: COACH SECTIONS =====
+  renderCoachSections(d);
+
+  // Score grid (inside detail collapsible)
   const sg = document.getElementById('scoreGrid'); sg.innerHTML = '';
   (d.phases || []).forEach(p => {
     const cls = scoreClass(p.score), col = scoreColor(p.score);
@@ -1186,27 +1374,31 @@ function renderReport(d) {
       <div style="font-size:9px;font-weight:600;color:${col};margin-bottom:1px;">${p.position||''}</div>
       <div class="sc-name">${p.name}</div>
       <div class="sc-val" style="color:${col};">${p.score}</div>
-      <div class="sc-note">${p.note||''}</div>
+      <div class="sc-note">${p.note||p.feedback||''}</div>
       <div class="range-track"><div class="range-marker" style="left:${p.score}%;"></div></div>
     </div>`;
   });
 
-  // Angles - sorted worst first
-  const sorted = [...(d.angles||[])].sort((a,b) => {
+  // Angles sorted worst first
+  const sorted = [...(d.angle_analysis||d.angles||[])].sort((a,b) => {
     const o={bad:0,warn:1,good:2}; return (o[a.status]||1)-(o[b.status]||1);
   });
   renderAngles(sorted);
 
-  // Insight — support both old field names and new coach_insight
-  const ins = document.getElementById('insightBox');
-  const insightText = d.coach_insight || d.insight || d.summary || 'Analisa selesai.';
-  ins.innerHTML = `<strong>Coach insight:</strong> ${insightText}`;
-  ins.style.display = 'block';
+  // Key moments (replaces raw error frames)
+  renderKeyMoments(d.error_frames || []);
 
-  // Drill cards (auto-generate)
-  renderDrillCards();
+  // Error frames overlay (kept in detail)
+  if ((d.error_frames||[]).length) {
+    document.getElementById('errorSection').style.display = 'block';
+    const eg = document.getElementById('errorGrid'); eg.innerHTML = '';
+    (d.error_frames||[]).forEach(ef => {
+      const col = ef.status==='bad'?'#dc2626':'#d97706';
+      eg.innerHTML += `<div class="err-item"><div class="err-label" style="background:${col};">${ef.position||''}: ${ef.issue||''}</div><div class="err-detail">${ef.description||''}</div></div>`;
+    });
+  }
 
-  // Radar chart — use d.radar if present, else build from phases
+  // Radar chart
   if (d.radar) {
     renderRadar(d.radar, d.overall_score);
   } else if (d.phases && d.phases.length >= 6) {
@@ -1223,11 +1415,78 @@ function renderReport(d) {
     renderRadar(radar, d.overall_score);
   }
 
-  // Build P1-P10 navigation
+  // Drill cards (smart — based on faults)
+  renderDrillCards(d.error_frames || []);
+
+  // P1-P10 nav
   renderP1P10Nav(d.phases || []);
 
   const summaryText = d.coach_insight || d.summary || '';
-  addMsg('ai', `<strong>Analisa P1–P10 selesai!</strong> Skor overall: <strong>${d.overall_score}/100</strong> (${scoreLabel(d.overall_score)})<br><br>${summaryText}`);
+  addMsg('ai', `<strong>Analisa selesai!</strong> Skor: <strong>${d.overall_score}/100</strong> (${scoreLabel(d.overall_score)})<br><br>${summaryText}`);
+}
+
+function renderCoachSections(d) {
+  document.getElementById('focusSection').style.display = 'block';
+
+  // Section 2: Fokus Utama — langsung dari GPT field
+  document.getElementById('focusFault').textContent = d.focus_fault || d.error_frames?.[0]?.issue || 'Konsistensi swing';
+  document.getElementById('focusSub').textContent = d.focus_sub || d.improvements?.[0] || '';
+
+  // Section 3: Coach Says — bahasa manusia dari GPT
+  const coachSays = d.coach_says || d.coach_insight || '';
+  document.getElementById('coachSaysText').textContent = coachSays ? `"${coachSays}"` : '"Swing kamu sudah teranalisa. Fokus ke area yang perlu diperbaiki."';
+
+  // Section 4: Why
+  document.getElementById('whyText').textContent = d.why || d.error_frames?.[0]?.description || d.coach_insight || '';
+
+  // Section 5: Fix — dari GPT langsung, fallback ke drill catalog
+  const drillName = d.fix_drill || '';
+  const drillFromCatalog = drillDefs.find(dr => dr.title.toLowerCase().includes(drillName.toLowerCase().split(' ')[0])) || drillDefs[0];
+  document.getElementById('fixDrill').textContent = `Drill: ${drillName || drillFromCatalog.title}`;
+  document.getElementById('fixFeel').textContent = `Feel: "${d.fix_feel || drillFromCatalog.tip || drillFromCatalog.desc}"`;
+
+  // Section 6: Impact — improvements dalam bahasa manusia
+  const impactEl = document.getElementById('impactItems');
+  const impactList = (d.improvements||[]).length > 0 ? d.improvements : ['Konsistensi swing meningkat','Ball flight lebih terprediksi','Jarak bisa bertambah'];
+  impactEl.innerHTML = impactList.slice(0,3).map(i => `<span>✓ ${i}</span>`).join('');
+}
+
+function findRelevantDrill(topError, worstPhase) {
+  // Match drill berdasarkan fault atau fase terburuk
+  const faultText = (topError?.issue || worstPhase?.name || '').toLowerCase();
+  const match = drillDefs.find(d => {
+    const keywords = d.title.toLowerCase() + ' ' + (d.desc||'').toLowerCase();
+    if (faultText.includes('elbow') || faultText.includes('flying')) return d.title.includes('Elbow');
+    if (faultText.includes('shoulder') || faultText.includes('turn')) return d.title.includes('Shoulder');
+    if (faultText.includes('hip') || faultText.includes('weight')) return d.title.includes('Hip') || d.title.includes('Weight');
+    if (faultText.includes('impact') || faultText.includes('shaft')) return d.title.includes('Impact') || d.title.includes('Weight');
+    return false;
+  });
+  return match ? { title: match.title, feel: match.tip || match.desc } : 
+    { title: drillDefs[0].title, feel: drillDefs[0].tip || drillDefs[0].desc };
+}
+
+function renderKeyMoments(errorFrames) {
+  const grid = document.getElementById('keyMomentsGrid');
+  if (!grid) return;
+  if (!errorFrames.length) {
+    grid.innerHTML = '<div style="font-size:12px;color:var(--muted);">Tidak ada momen kritis yang terdeteksi. Swing sudah cukup solid!</div>';
+    return;
+  }
+  grid.innerHTML = errorFrames.slice(0,4).map(ef => `
+    <div class="key-moment ${ef.status||'warn'}">
+      <div class="key-moment-phase">${ef.position||''}: ${ef.issue||''}</div>
+      <div class="key-moment-desc">👉 ${ef.description||ef.actual_value||''}</div>
+    </div>`).join('');
+}
+
+function toggleDetail(id, arrowId) {
+  const body = document.getElementById(id);
+  const arrow = document.getElementById(arrowId);
+  const collapsed = body.classList.contains('collapsed');
+  body.classList.toggle('collapsed');
+  body.style.maxHeight = collapsed ? body.scrollHeight + 'px' : '0';
+  if (arrow) arrow.classList.toggle('open');
 }
 
 function renderP1P10Nav(phases) {
@@ -1380,13 +1639,10 @@ async function runMediaPipeOnFrame(vid) {
   const canvas = document.getElementById('overlayCanvas');
   if (!canvas) { _poseRunning = false; return; }
 
-  // Match canvas to video container size
   canvas.width = vid.clientWidth || 640;
   canvas.height = vid.clientHeight || 360;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Draw live overlay text first
   drawLiveOverlay(vid.currentTime);
 
   try {
@@ -1394,16 +1650,127 @@ async function runMediaPipeOnFrame(vid) {
     pose.onResults(results => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawLiveOverlay(vid.currentTime);
+
       if (results.poseLandmarks) {
-        // Draw pose scaled to actual rendered video area (not full canvas)
+        currentPoseResult = results; // store for crop canvas
         const rect = getVideoRenderedRect(vid);
         drawPoseOnCanvasRect(ctx, results.poseLandmarks, rect);
+
+        // ===== AUTO CROP =====
+        if (cropEnabled) {
+          const newCrop = computeCropFromLandmarks(results.poseLandmarks, vid.videoWidth, vid.videoHeight);
+          if (newCrop) smoothCrop(newCrop);
+          renderCropCanvas(vid);
+        }
       }
       _poseRunning = false;
     });
     await pose.send({ image: vid });
   } catch(e) {
     _poseRunning = false;
+  }
+}
+
+// Fixed container height for crop canvas (mobile stable)
+// Dynamic container height — mobile: 55vh max, desktop: 480px max
+const CROP_CONTAINER_H = Math.min(
+  window.innerHeight * 0.55,
+  480,
+  Math.max(280, window.innerWidth * 1.1) // portrait bias: taller than wide
+);
+
+function renderCropCanvas(vid) {
+  if (!cropRegion || !cropEnabled) {
+    const wrap = document.getElementById('videoPlayer')?.parentElement;
+    if (wrap) wrap.classList.remove('crop-active');
+    return;
+  }
+
+  const cropCanvas = document.getElementById('cropCanvas');
+  if (!cropCanvas) return;
+
+  const { sx, sy, sw, sh } = cropRegion;
+
+  // Fixed container: always CROP_CONTAINER_H tall, full width
+  const containerW = Math.min(vid.clientWidth || 320, window.innerWidth * 0.92);
+  const containerH = CROP_CONTAINER_H;
+
+  // Natural ratio of the crop region
+  const naturalRatio = cropRegion.ratio || (sw / sh);
+
+  // Fit crop area inside container with letterbox (object-fit: contain style)
+  let drawW, drawH, offsetX, offsetY;
+  if (naturalRatio > containerW / containerH) {
+    // Wider than container — fit to width, letterbox top/bottom
+    drawW = containerW;
+    drawH = Math.round(containerW / naturalRatio);
+    offsetX = 0;
+    offsetY = Math.round((containerH - drawH) / 2);
+  } else {
+    // Taller than container — fit to height, letterbox left/right
+    drawH = containerH;
+    drawW = Math.round(containerH * naturalRatio);
+    offsetX = Math.round((containerW - drawW) / 2);
+    offsetY = 0;
+  }
+
+  // Set canvas to fixed container size
+  cropCanvas.width = containerW;
+  cropCanvas.height = containerH;
+  cropCanvas.style.width = containerW + 'px';
+  cropCanvas.style.height = containerH + 'px';
+
+  const ctx = cropCanvas.getContext('2d');
+
+  // Letterbox background
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, containerW, containerH);
+
+  // Draw cropped video into fitted area
+  ctx.drawImage(vid, sx, sy, sw, sh, offsetX, offsetY, drawW, drawH);
+
+  // Draw pose overlay scaled to fitted area
+  if (currentPoseResult?.poseLandmarks) {
+    const scaledLms = currentPoseResult.poseLandmarks.map(lm => ({
+      ...lm,
+      x: (lm.x * vid.videoWidth - sx) / sw,
+      y: (lm.y * vid.videoHeight - sy) / sh,
+    }));
+    // Draw into the fitted sub-rect only
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    drawPoseOnCanvas(ctx, scaledLms, drawW, drawH);
+    ctx.restore();
+  }
+
+  // Phase label
+  drawLiveOverlayOnCtx(ctx, containerW, containerH, vid.currentTime);
+
+  // Activate crop view
+  const wrap = vid.parentElement;
+  if (wrap) {
+    wrap.classList.add('crop-active');
+    // Keep player-wrap height stable
+    wrap.style.minHeight = containerH + 'px';
+  }
+}
+
+function drawLiveOverlayOnCtx(ctx, W, H, currentTime) {
+  if (!analysisData?.phases) return;
+  const vid = document.getElementById('videoPlayer');
+  const active = analysisData.phases.find((p, i) => {
+    const selFrames = analysisData._selectedFrames || [];
+    const start = selFrames[i]?.timestamp ?? (i * (vid.duration||2) / Math.max(analysisData.phases.length-1,1));
+    const next = selFrames[i+1]?.timestamp ?? ((i+1) * (vid.duration||2) / Math.max(analysisData.phases.length-1,1));
+    return currentTime >= start && currentTime < next;
+  });
+  if (active) {
+    const col = scoreColor(active.score);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(8, 8, 165, 26);
+    ctx.fillStyle = col;
+    ctx.font = '500 12px system-ui';
+    ctx.fillText(`${active.position||''} ${active.name} · ${active.score}/100`, 14, 25);
   }
 }
 
@@ -1549,7 +1916,7 @@ function renderRadar(r, overallScore) {
   });
 }
 
-function renderDrillCards() {
+function renderDrillCards(errorFrames) {
   const dg = document.getElementById('drillGrid'); dg.innerHTML = '';
   drillDefs.forEach((d,i) => {
     const card = document.createElement('div'); card.className = 'drill-card'; card.id = `drill-${i}`;
@@ -1632,6 +1999,7 @@ function resetAll() {
   document.getElementById('btnDTL').classList.remove('selected');
   document.getElementById('btnFaceOn').classList.remove('selected');
   document.getElementById('viewHint').classList.remove('show');
+  const fs = document.getElementById('focusSection'); if(fs) fs.style.display='none';
   document.getElementById('viewWarning').style.display='none';
 
   // Re-lock upload
