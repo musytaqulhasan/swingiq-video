@@ -125,7 +125,7 @@ export default async function handler(req, res) {
     const viewLabel = viewAngle === 'dtl' ? 'Down the Line (DTL)' : viewAngle === 'face-on' ? 'Face On' : 'General';
 
     // ====== BUILD IMAGE CONTENT ======
-    const imageContent = frames.slice(0, 10).map((f, idx) => {
+    const imageContent = frames.slice(0, 8).map((f, idx) => {
       const p = (positions || [])[idx] || { position: `P${idx + 1}`, name: `Position ${idx + 1}` };
       return [
         { type: 'text', text: `${p.position} — ${p.name}:` },
@@ -140,7 +140,7 @@ ${viewCtx.cameraDesc}
 
 ${viewCtx.focusAreas}
 
-You will receive 10 images representing positions P1 through P10 of a golf swing.
+You will receive 8 images representing positions P1 through P8 of a golf swing.
 You MUST return ONLY a valid JSON object with EXACTLY this structure. No explanation, no markdown, no extra text — just raw JSON:
 
 {
@@ -166,12 +166,10 @@ You MUST return ONLY a valid JSON object with EXACTLY this structure. No explana
     { "position": "P2", "name": "Takeaway", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
     { "position": "P3", "name": "Backswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
     { "position": "P4", "name": "Top of Backswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P5", "name": "Early Downswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P6", "name": "Late Downswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P7", "name": "Impact", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P8", "name": "Follow Through", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P9", "name": "Release", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P10", "name": "Finish", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" }
+    { "position": "P5", "name": "Downswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P6", "name": "Impact", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P7", "name": "Follow Through", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
+    { "position": "P8", "name": "Finish", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" }
   ],
   "angle_analysis": [
     {
@@ -199,7 +197,7 @@ Rules:
 - coach_insight, coach_says, why, focus_fault, fix_drill, fix_feel WAJIB semua diisi. TIDAK BOLEH null atau kosong.
 - coach_says harus bahasa manusia natural, bukan bahasa teknis/biomechanics.
 - improvements harus berisi HASIL NYATA yang bisa dirasakan pemain (bukan deskripsi teknis).
-- phases HARUS tepat 10 entry (P1 sampai P10).
+- phases HARUS tepat 8 entry (P1 sampai P8).
 - angle_analysis HARUS minimal 5 entry.
 - error_frames: hanya posisi bad/warn. Boleh [] jika swing bagus.
 - Semua teks dalam Bahasa Indonesia.
@@ -257,6 +255,8 @@ Analisa semua 10 posisi dan return JSON sesuai schema.`;
     if (!Array.isArray(result.phases) || result.phases.length === 0) {
       return res.status(500).json({ error: 'GPT tidak return phases', debug: JSON.stringify(result).substring(0, 300) });
     }
+    // Ensure exactly 8 phases
+    if (result.phases.length > 8) result.phases = result.phases.slice(0, 8);
     if (!Array.isArray(result.strengths)) result.strengths = [];
     if (!Array.isArray(result.improvements)) result.improvements = ['Konsistensi swing meningkat', 'Ball flight lebih terprediksi', 'Jarak bisa bertambah'];
     if (!Array.isArray(result.angle_analysis)) result.angle_analysis = [];
