@@ -213,32 +213,50 @@ Biomechanics engine mendeteksi:
 Gunakan sebagai referensi, validasi secara visual dari gambar.
 Analisa semua 10 posisi dan return JSON sesuai schema.`;
 
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        max_tokens: 3000,
-        messages: [
-          { role: 'system', content: sys },
-          { role: 'user', content: [...imageContent, { type: 'text', text: userPrompt }] }
-        ]
-      })
-    });
+    const callGPT = async (messages) => {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_KEY}`
+        },
+        body: JSON.stringify({ model: 'gpt-4o', max_tokens: 3000, messages })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error?.message || 'OpenAI error');
+      let raw = d.choices[0].message.content.trim();
+      raw = raw.replace(/```json[\s\S]*?```/g, m => m.replace(/```json|```/g, '')).replace(/```/g, '').trim();
+      return raw;
+    };
 
-    const d = await r.json();
-    if (!r.ok) return res.status(500).json({ error: d.error?.message || 'OpenAI error' });
+    // First attempt
+    let raw = await callGPT([
+      { role: 'system', content: sys },
+      { role: 'user', content: [...imageContent, { type: 'text', text: userPrompt }] }
+    ]);
 
-    let raw = d.choices[0].message.content.trim();
-    raw = raw.replace(/```json|```/g, '').trim();
+    // Auto-retry jika GPT tidak return JSON
+    if (raw.indexOf('{') === -1 || raw.lastIndexOf('}') === -1) {
+      console.log("Attempt 1 no JSON, retrying...", raw.substring(0, 200));
+      raw = await callGPT([
+        { role: 'system', content: 'You are a JSON generator. Return ONLY a valid JSON object. No text before or after. No markdown. Start with { and end with }.' },
+        { role: 'user', content: [...imageContent, { type: 'text', text: userPrompt + '
+
+CRITICAL: Return ONLY raw JSON. Start with { end with }. Nothing else.' }] }
+      ]);
+    }
 
     const start = raw.indexOf('{');
     const end = raw.lastIndexOf('}');
     if (start === -1 || end === -1) {
-      return res.status(500).json({ error: 'GPT tidak return JSON valid', debug: raw.substring(0, 300) });
+      console.log("GPT RAW:", raw.substring(0, 500));
+      return res.status(500).json({
+        error: 'GPT tidak return JSON valid',
+        debug: raw.substring(0, 500),
+        raw_length: raw.length,
+        frames_received: frames.length,
+        view: viewAngle
+      });
     }
 
     let result;
