@@ -20,7 +20,7 @@
   body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;}
   header{background:white;border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
   .logo{font-size:18px;font-weight:600;}.logo span{color:var(--accent);}
-  .badge{display:none;}
+  .badge{font-size:11px;background:var(--accent);color:white;padding:3px 10px;border-radius:20px;}
   .main{max-width:1100px;margin:0 auto;padding:20px;display:grid;grid-template-columns:1fr 360px;gap:18px;}
   .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
   .card-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
@@ -91,7 +91,7 @@
   /* Error frames */
   .err-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
   .err-card{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:white;}
-  .err-frame{position:relative;background:#111;aspect-ratio:3/4;}
+  .err-frame{position:relative;background:#111;aspect-ratio:16/9;}
   .err-frame canvas{width:100%;height:100%;display:block;}
   .err-ts{position:absolute;bottom:5px;left:8px;background:rgba(0,0,0,0.7);color:white;font-size:9px;padding:2px 6px;border-radius:4px;}
   .err-badge{position:absolute;top:5px;right:8px;font-size:9px;font-weight:500;padding:2px 7px;border-radius:8px;}
@@ -141,6 +141,23 @@
 
   @media(max-width:768px){.main{grid-template-columns:1fr;}.score-grid{grid-template-columns:repeat(2,1fr);}.drill-grid{grid-template-columns:1fr;}}
 
+  /* Bottom Navigation */
+  .bottom-nav{position:fixed;bottom:0;left:0;right:0;height:62px;background:white;border-top:1px solid var(--border);display:flex;align-items:stretch;z-index:1000;padding-bottom:env(safe-area-inset-bottom);}
+  .bottom-nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;border:none;background:none;padding:0;color:var(--muted);font-family:inherit;transition:color .15s;}
+  .bottom-nav-item.active{color:var(--accent);}
+  .bottom-nav-item svg{width:22px;height:22px;}
+  .bottom-nav-label{font-size:10px;font-weight:500;}
+  /* Push content above bottom nav */
+  body.has-nav .main{padding-bottom:74px;}
+  body.has-nav header{padding-bottom:0;}
+  /* Tab pages */
+  .tab-page{display:none;}
+  .tab-page.active{display:block;}
+  .coming-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:12px;color:var(--muted);}
+  .coming-soon-icon{font-size:48px;}
+  .coming-soon-title{font-size:18px;font-weight:600;color:var(--text);}
+  .coming-soon-sub{font-size:13px;color:var(--muted);text-align:center;max-width:260px;line-height:1.6;}
+
   /* Coach sections */
   .coach-focus{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:14px 16px;}
   .coach-focus-label{font-size:10px;font-weight:600;color:#2563eb;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
@@ -165,6 +182,18 @@
   .collapsible-body{overflow:hidden;transition:max-height .3s ease;}
   .collapsible-body.collapsed{max-height:0;}
   .key-moment{background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;border-left:3px solid var(--border);}
+  .tempo-card{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+  .tempo-label{font-size:10px;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .tempo-ratio{font-size:22px;font-weight:700;color:#14532d;letter-spacing:2px;}
+  .tempo-bars{display:flex;gap:4px;margin:8px 0;align-items:flex-end;height:32px;}
+  .tempo-bar{border-radius:3px 3px 0 0;min-width:18px;}
+  .tempo-bar.bs{background:#16a34a;}
+  .tempo-bar.ds{background:#dc2626;}
+  .tempo-bar.ft{background:#2563eb;}
+  .tempo-legend{display:flex;gap:10px;font-size:10px;color:var(--muted);}
+  .tempo-legend span{display:flex;align-items:center;gap:3px;}
+  .tempo-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  .tempo-class{font-size:11px;color:#16a34a;font-weight:500;margin-top:4px;}
   .key-moment.bad{border-left-color:#dc2626;}
   .key-moment.warn{border-left-color:#d97706;}
   .key-moment-phase{font-size:11px;font-weight:600;color:var(--text);margin-bottom:3px;}
@@ -220,6 +249,7 @@
   <div class="badge">AI Golf Analyzer</div>
 </header>
 
+<div class="tab-page active" id="pageHome">
 <div class="main">
   <div style="display:flex;flex-direction:column;gap:14px;">
 
@@ -324,13 +354,11 @@
             <canvas id="cropCanvas"></canvas>
             <div class="crop-badge">Auto Crop</div>
             <div class="overlay-controls">
-              <button class="tog off" id="togSkeleton" onclick="toggleOverlay('skeleton',this)">Skeleton</button>
-              <button class="tog off" id="togAngles" onclick="toggleOverlay('angles',this)">Sudut</button>
-              <button class="tog off" id="togLines" onclick="toggleOverlay('lines',this)">Garis acuan</button>
-              <button class="tog off" id="togErrors" onclick="toggleOverlay('errors',this)">Error zone</button>
-              <button class="tog off" id="togCrop" onclick="toggleCrop(this)">Auto Crop</button>
-              <button class="tog off" id="togSwingPlane" onclick="toggleOverlay('swingPlane',this)">Swing Plane</button>
-              <button class="tog off" id="togClubTracer" onclick="toggleOverlay('clubTracer',this)">Club Tracer</button>
+              <button class="tog on" id="togSkeleton" onclick="toggleOverlay('skeleton',this)">Skeleton</button>
+              <button class="tog on" id="togAngles" onclick="toggleOverlay('angles',this)">Sudut</button>
+              <button class="tog on" id="togLines" onclick="toggleOverlay('lines',this)">Garis acuan</button>
+              <button class="tog on" id="togErrors" onclick="toggleOverlay('errors',this)">Error zone</button>
+              <button class="tog on" id="togCrop" onclick="toggleCrop(this)">Auto Crop</button>
             </div>
             <div class="vid-controls">
               <button class="play-btn" id="playBtn" onclick="togglePlay()">▶</button>
@@ -351,7 +379,20 @@
       <!-- SECTION 2: TODAY'S FOCUS -->
       <div class="card" id="focusSection" style="display:none;">
         <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
-          <div class="coach-focus" id="focusBox">
+          <!-- Tempo Card -->
+        <div class="tempo-card" id="tempoCard" style="display:none;">
+          <div class="tempo-label">⏱ Tempo Swing</div>
+          <div class="tempo-ratio" id="tempoRatio">–</div>
+          <div class="tempo-bars" id="tempoBars"></div>
+          <div class="tempo-legend">
+            <span><span class="tempo-dot" style="background:#16a34a;"></span>Backswing</span>
+            <span><span class="tempo-dot" style="background:#dc2626;"></span>Downswing</span>
+            <span><span class="tempo-dot" style="background:#2563eb;"></span>Follow</span>
+          </div>
+          <div class="tempo-class" id="tempoClass"></div>
+        </div>
+
+        <div class="coach-focus" id="focusBox">
             <div class="coach-focus-label">🎯 Fokus Utama Kamu</div>
             <div class="coach-focus-fault" id="focusFault">–</div>
             <div class="coach-focus-sub" id="focusSub">–</div>
@@ -489,15 +530,11 @@ let showingAll = false;
 let showingAllAngles = false;
 let poseInstance = null;
 let frameData = {};
-let overlayState = { skeleton:false, angles:false, lines:false, errors:false, swingPlane:false, clubTracer:false };
+let overlayState = { skeleton:true, angles:true, lines:true, errors:true };
 let currentPoseResult = null;
 let selectedView = null; // 'dtl' | 'face-on'
 let cropRegion = null;   // { sx, sy, sw, sh } — auto-crop dari golfer bounding box
-let cropEnabled = false;  // default OFF — auto-applied after analyze
-
-// Club tracer: stores club head positions across frames
-let clubTracerPoints = [];
-let clubTracerActive = false;
+let cropEnabled = true;  // toggle crop on/off
 
 const drillDefs = [
   {
@@ -612,6 +649,36 @@ function addMsg(role,html){ const cm=document.getElementById('chatMsgs');const d
 function addTyping(){ const d=addMsg('ai','<div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>');d.id='ty'+Date.now();return d.id; }
 function removeTyping(id){ const el=document.getElementById(id);if(el)el.remove(); }
 
+// --- Bottom Navigation ---
+function switchTab(tab) {
+  // Hide all tab pages
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.remove('active'));
+  // Deactivate all nav items
+  document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
+  // Show selected page
+  const page = document.getElementById('page' + tab.charAt(0).toUpperCase() + tab.slice(1));
+  if (page) page.classList.add('active');
+  // Activate nav item
+  const btn = document.getElementById('nav' + tab.charAt(0).toUpperCase() + tab.slice(1));
+  if (btn) btn.classList.add('active');
+  // Scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Init — show bottom nav only for PWA or small screens
+function initBottomNav() {
+  const isPWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isMobile = window.innerWidth <= 768;
+  if (isPWA || isMobile) {
+    document.body.classList.add('has-nav');
+    document.getElementById('bottomNav').style.display = 'flex';
+  } else {
+    document.getElementById('bottomNav').style.display = 'none';
+  }
+}
+window.addEventListener('load', initBottomNav);
+window.addEventListener('resize', initBottomNav);
+
 // --- Upload handling ---
 const uploadZone = document.getElementById('uploadZone');
 uploadZone.addEventListener('dragover', e=>{ e.preventDefault(); uploadZone.classList.add('drag'); });
@@ -691,40 +758,43 @@ async function detectP1P10Visual(frames) {
   const prompt = `You are an expert golf swing analyzer. I will show you ${frames.length} sequential frames from a golf swing video.
 ${viewContext}
 
-Your task: identify which frame BEST matches each of the 8 golf swing positions below.
+Your task: identify which frame BEST matches each of the 10 golf swing positions below.
 Study ALL frames carefully — use CLUB/SHAFT position as the primary cue.
 
 POSITION DEFINITIONS:
 P1 - Setup/Address: Golfer stationary at address. Club grounded at ball. No movement yet.
-P2 - Takeaway: Club just started moving back. Club head below hip height. Wrists not yet hinged.
-P3 - Backswing: Club shaft ~horizontal going back at hip-to-shoulder height. Lead arm mostly straight.
-P4 - Top of Backswing: Club at HIGHEST point. Max shoulder turn. Wrists fully hinged. Back facing target.
-P5 - Downswing: Club coming down from top. Hips shifting target-ward. Wrist lag visible.
-P6 - Impact: Club head at the ball. Arms extended. Shaft slight forward lean. Hips clearly open.
-P7 - Follow Through: Club passed impact, below shoulder height on follow-through side. Body rotating.
-P8 - Finish: Swing complete. Club behind head/back. Full weight on lead foot. Fully facing target.
+P2 - Takeaway: Club just started moving back. Club head BELOW hip height, shaft near-horizontal LOW. Wrists not yet hinged.
+P3 - Backswing: Club shaft ~HORIZONTAL going back at hip-to-shoulder height (9 o'clock). Lead arm mostly straight.
+P4 - Top of Backswing: Club at HIGHEST point. Lead arm at or above shoulder. Max shoulder turn. Wrists fully hinged. Back facing target.
+P5 - Transition/Start Downswing: Club just begins dropping from top. Still above shoulder height. Hips starting to shift target-ward.
+P6 - Shaft Parallel Down (Lag): Club shaft HORIZONTAL again on DOWNSWING. Hands at hip height. Wrist lag visible. This is BEFORE impact.
+P7 - Impact: Club head at the ball. Arms extended. Shaft slight forward lean. Hips clearly open. Head still behind ball.
+P8 - Early Follow Through: Club passed impact, below shoulder height on follow-through side. Arms extending forward.
+P9 - Late Follow Through: Club shaft horizontal on FOLLOW-THROUGH side (mirror of P3). Body mostly rotated. Weight on lead foot.
+P10 - Finish: Swing complete. Club behind head/back. Full weight on lead foot. Fully facing target.
 
-SHAFT HEIGHT SEQUENCE:
-P1 = address (grounded)
-P2 = shaft LOW going back
-P3 = shaft MID (hip/shoulder) going back
-P4 = shaft HIGH at top
-P5 = shaft coming down (lag)
-P6 = shaft at ball (impact)
-P7 = shaft LOW/MID going forward
-P8 = shaft HIGH at finish
+SHAFT HEIGHT SEQUENCE (use this to distinguish similar-looking frames):
+P2 = shaft LOW (below hips) going back
+P3 = shaft MID (hip/shoulder) going back  
+P4 = shaft HIGH (above shoulder) at top
+P5 = shaft HIGH coming down
+P6 = shaft MID (hip height) coming down — this is AFTER P5, BEFORE P7
+P7 = shaft at ball (impact)
+P8 = shaft LOW going forward
+P9 = shaft MID going forward
+P10 = shaft HIGH at finish
 
 RULES:
-- Strictly chronological: frame(P1) < frame(P2) < ... < frame(P8)
-- P5-P6 happen very fast, may be 1-2 frames apart
+- Strictly chronological: frame(P1) < frame(P2) < ... < frame(P10)
+- P5-P7 happen very fast, may be 1-2 frames apart
 - Each position uses a DIFFERENT frame
-- P1 = first frames, P8 = last frames
+- P1 = first frames, P10 = last frames
 
 Return ONLY raw JSON array:
 [
   {"position":"P1","name":"Setup","frame_index":0,"confidence":"high","visual_cue":"club grounded at ball"},
   {"position":"P2","name":"Takeaway","frame_index":2,"confidence":"high","visual_cue":"club below hips moving back"},
-  ...all 8 positions...
+  ...all 10 positions...
 ]`
 
   const res = await fetch('/api/proxy', {
@@ -759,7 +829,7 @@ Return ONLY raw JSON array:
   try {
     const positions = JSON.parse(match[0]);
     // Validate: ensure all 10 positions present and indices are valid
-    if (positions.length < 8) {
+    if (positions.length < 10) {
       console.warn('Incomplete positions detected, using fallback');
       return fallbackTimingPositions(frames);
     }
@@ -782,9 +852,9 @@ Return ONLY raw JSON array:
 
 // Fallback: time-based distribution if visual detection fails
 function fallbackTimingPositions(frames) {
-  const P_NAMES = ['Setup','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
+  const P_NAMES = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
   // Golf swing timing: setup slow, downswing very fast
-  const P_PERCENT = [0, 0.14, 0.28, 0.42, 0.57, 0.68, 0.82, 1.0];
+  const P_PERCENT = [0, 0.12, 0.25, 0.40, 0.52, 0.62, 0.70, 0.78, 0.87, 1.0];
   const positions = P_NAMES.map((name, i) => ({
     position: `P${i+1}`,
     name,
@@ -913,14 +983,6 @@ async function runFullAnalysis() {
 
     // Step 7: Render report
     renderReport(analysisData);
-
-    // Auto-enable crop after analysis — portrait 3:4 ratio
-    cropEnabled = true;
-    document.getElementById('togCrop').classList.replace('off','on');
-
-    // Reset club tracer points for new analysis
-    clubTracerPoints = [];
-    clubTracerActive = false;
 
     // Step 8: MediaPipe overlay on error frames
     setStatus('Mendeteksi pose di frame bermasalah...', 'run');
@@ -1087,7 +1149,7 @@ async function extractAndAnalyzeErrorFrames(d) {
     const badgeCls = ef.status === 'bad' ? 'bad' : 'warn';
     const card = document.createElement('div'); card.className = 'err-card';
     card.innerHTML = `<div class="err-frame">
-      <canvas id="${canvasId}" width="240" height="320"></canvas>
+      <canvas id="${canvasId}" width="320" height="180"></canvas>
       <div class="err-ts">${ef.position||''} · ${fmtTime(ts)}</div>
       <div class="err-badge ${badgeCls}">${ef.status==='bad'?'Perlu perhatian':'Bisa dioptimalkan'}</div>
     </div>
@@ -1144,28 +1206,11 @@ async function captureErrorFrame(vid, timestamp, canvasId, storedFrame) {
   const ctx = canvas.getContext('2d');
 
   if (storedFrame?.base64) {
-    // Use stored frame directly — draw with portrait 3:4 crop centered
+    // Use stored frame directly — no seek needed, guaranteed correct frame
     await new Promise(resolve => {
       const img = new Image();
       img.onload = () => {
-        const cw = canvas.width, ch = canvas.height; // 240x320
-        // Crop center portrait region from frame
-        const srcRatio = img.naturalWidth / img.naturalHeight;
-        const tgtRatio = cw / ch; // ~0.75 portrait
-        let sx2, sy2, sw2, sh2;
-        if (srcRatio > tgtRatio) {
-          // source wider — crop sides
-          sh2 = img.naturalHeight;
-          sw2 = sh2 * tgtRatio;
-          sx2 = (img.naturalWidth - sw2) / 2;
-          sy2 = 0;
-        } else {
-          sw2 = img.naturalWidth;
-          sh2 = sw2 / tgtRatio;
-          sx2 = 0;
-          sy2 = (img.naturalHeight - sh2) / 2;
-        }
-        ctx.drawImage(img, sx2, sy2, sw2, sh2, 0, 0, cw, ch);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         resolve();
       };
       img.onerror = resolve;
@@ -1303,50 +1348,39 @@ function computeCropFromLandmarks(lms, vidW, vidH) {
     if (l.y > maxY) maxY = l.y;
   });
 
-  // Body width in normalized units
-  const bodyW = maxX - minX;
-  const bodyH = maxY - minY;
+  const bw = maxX - minX;
+  const bh = maxY - minY;
 
-  // Padding: 1 body-width on each side for club swing space
-  const padX   = bodyW * 1.0;   // 1 lebar badan kiri & kanan
-  const padTop  = bodyH * 0.12;
-  const padBot  = bodyH * 0.10;
+  // Adaptive padding — 20% horizontal, 15% top, 35% bottom (club swing space)
+  const padX   = bw * 0.20;
+  const padTop  = bh * 0.15;
+  const padBot  = bh * 0.35; // extra untuk area club di bawah
 
-  let cx = (minX + maxX) / 2; // center x of body
-  let cy = (minY + maxY) / 2; // center y
+  let sx = Math.max(0, minX - padX);
+  let ex = Math.min(1, maxX + padX);
+  let sy = Math.max(0, minY - padTop);
+  let ey = Math.min(1, maxY + padBot);
 
-  // Target 3:4 portrait ratio
-  // Compute crop width first: body + padding on both sides
-  let cropW = bodyW + padX * 2;
+  let sw = ex - sx;
+  let sh = ey - sy;
 
-  // Force 3:4 ratio: height = cropW * (4/3)
-  let cropH = cropW * (4 / 3);
+  // NO forced aspect ratio — follow natural bounding box of the golfer
+  // Just ensure minimum sensible size
+  if (sw < 0.15) { const extra = (0.15 - sw) / 2; sx = Math.max(0, sx-extra); sw = 0.15; }
+  if (sh < 0.20) { const extra = (0.20 - sh) / 2; sy = Math.max(0, sy-extra); sh = 0.20; }
 
-  // Ensure body fits vertically with padding
-  const minH = bodyH + padTop + padBot;
-  if (cropH < minH) {
-    cropH = minH;
-    cropW = cropH * (3 / 4);
-  }
-
-  // Center the crop on body center, but vertically: top from head + padTop
-  let sx = cx - cropW / 2;
-  let sy = minY - padTop;
-  let sw = cropW;
-  let sh = cropH;
-
-  // Clamp to video bounds
-  if (sx < 0) sx = 0;
-  if (sy < 0) sy = 0;
-  if (sx + sw > 1) { sx = 1 - sw; if (sx < 0) { sx = 0; sw = 1; } }
-  if (sy + sh > 1) { sy = 1 - sh; if (sy < 0) { sy = 0; sh = 1; } }
+  // Clamp
+  sx = Math.max(0, sx);
+  sy = Math.max(0, sy);
+  sw = Math.min(sw, 1 - sx);
+  sh = Math.min(sh, 1 - sy);
 
   return {
     sx: sx * vidW,
     sy: sy * vidH,
     sw: sw * vidW,
     sh: sh * vidH,
-    ratio: sw / sh  // should be ~0.75 (3:4)
+    ratio: sw / sh  // store natural ratio for canvas sizing
   };
 }
 
@@ -1427,23 +1461,11 @@ function renderReport(d) {
     </div>`;
   });
 
-  // Angles sorted worst first — filter out undefined/empty
-  const rawAngles = (d.angle_analysis || d.angles || []).map(a => ({
-    position: a.phase || a.position || '',
-    area: a.metric || a.area || '',
-    actual: a.value || a.actual || '',
-    ideal: a.ideal || '',
-    status: a.status || 'warn',
-    label: a.status === 'good' ? 'Baik' : a.status === 'bad' ? 'Perlu perbaikan' : 'Perhatian',
-    impact: a.detail || a.impact || ''
-  })).filter(a =>
-    a.actual && a.actual !== 'undefined' && String(a.actual).trim() !== '' &&
-    a.area && a.area !== 'undefined' && String(a.area).trim() !== ''
-  );
-  const sorted = [...rawAngles].sort((a,b) => {
+  // Angles sorted worst first
+  const sorted = [...(d.angle_analysis||d.angles||[])].sort((a,b) => {
     const o={bad:0,warn:1,good:2}; return (o[a.status]||1)-(o[b.status]||1);
   });
-  if (sorted.length > 0) renderAngles(sorted);
+  renderAngles(sorted);
 
   // Key moments (replaces raw error frames)
   renderKeyMoments(d.error_frames || []);
@@ -1467,10 +1489,10 @@ function renderReport(d) {
     const radar = {
       setup:          phaseMap['P1'] || 0,
       backswing:      Math.round(((phaseMap['P2']||0)+(phaseMap['P3']||0)+(phaseMap['P4']||0))/3),
-      power:          Math.round(((phaseMap['P4']||0)+(phaseMap['P5']||0))/2),
-      impact:         phaseMap['P6'] || 0,
-      follow_through: Math.round(((phaseMap['P7']||0))/1),
-      balance:        phaseMap['P8'] || 0
+      power:          Math.round(((phaseMap['P5']||0)+(phaseMap['P6']||0))/2),
+      impact:         phaseMap['P7'] || 0,
+      follow_through: Math.round(((phaseMap['P8']||0)+(phaseMap['P9']||0))/2),
+      balance:        phaseMap['P10'] || 0
     };
     renderRadar(radar, d.overall_score);
   }
@@ -1505,10 +1527,32 @@ function renderCoachSections(d) {
   document.getElementById('fixDrill').textContent = `Drill: ${drillName || drillFromCatalog.title}`;
   document.getElementById('fixFeel').textContent = `Feel: "${d.fix_feel || drillFromCatalog.tip || drillFromCatalog.desc}"`;
 
+  // Tempo display
+  renderTempo(d.tempo);
+
   // Section 6: Impact — improvements dalam bahasa manusia
   const impactEl = document.getElementById('impactItems');
   const impactList = (d.improvements||[]).length > 0 ? d.improvements : ['Konsistensi swing meningkat','Ball flight lebih terprediksi','Jarak bisa bertambah'];
   impactEl.innerHTML = impactList.slice(0,3).map(i => `<span>✓ ${i}</span>`).join('');
+}
+
+function renderTempo(tempo) {
+  const card = document.getElementById('tempoCard');
+  if (!card || !tempo) return;
+
+  card.style.display = 'block';
+  document.getElementById('tempoRatio').textContent = tempo.ratio || '–';
+  document.getElementById('tempoClass').textContent = tempo.classification || '';
+
+  // Draw visual bars — proportional to time
+  const barsEl = document.getElementById('tempoBars');
+  const maxMs = Math.max(tempo.backswing_ms, tempo.downswing_ms, tempo.follow_ms, 1);
+  const maxH = 30;
+  barsEl.innerHTML = `
+    <div class="tempo-bar bs" style="height:${Math.round(tempo.backswing_ms/maxMs*maxH)}px;flex:${tempo.backswing_ms}" title="Backswing ${tempo.backswing_ms}ms"></div>
+    <div class="tempo-bar ds" style="height:${Math.round(tempo.downswing_ms/maxMs*maxH)}px;flex:${tempo.downswing_ms}" title="Downswing ${tempo.downswing_ms}ms"></div>
+    <div class="tempo-bar ft" style="height:${Math.round(tempo.follow_ms/maxMs*maxH)}px;flex:${tempo.follow_ms}" title="Follow ${tempo.follow_ms}ms"></div>
+  `;
 }
 
 function findRelevantDrill(topError, worstPhase) {
@@ -1588,7 +1632,7 @@ function renderPhaseDash(phases) {
   const dash = document.getElementById('phaseDash');
   if (!dash) return;
   dash.innerHTML = '';
-  const SWING_ORDER = ['Setup','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
+  const SWING_ORDER = ['Setup','Takeaway','Backswing','Top of Backswing','Start Downswing','Shaft Parallel Down','Impact','Early Follow Through','Late Follow Through','Finish'];
   const sorted = phases.slice().sort((a,b) => {
     const ia = SWING_ORDER.indexOf(a.name), ib = SWING_ORDER.indexOf(b.name);
     return (ia===-1?99:ia)-(ib===-1?99:ib);
@@ -1910,87 +1954,6 @@ function drawPoseOnCanvasRect(ctx, lms, rect) {
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.stroke();
     });
   }
-
-  // ===== SWING PLANE =====
-  if (overlayState.swingPlane && lms[15] && lms[11] && lms[23]) {
-    // DTL view: draw swing plane line from wrist through shoulder through hip extended
-    const wrist = lmPos(15);  // left wrist
-    const shoulder = lmPos(11); // left shoulder
-    const hip = lmPos(23);    // left hip
-
-    // Extend the line from hip through shoulder outward
-    const dx = shoulder.x - hip.x;
-    const dy = shoulder.y - hip.y;
-    const len = Math.sqrt(dx*dx + dy*dy);
-    if (len > 0) {
-      const nx = dx / len, ny = dy / len;
-      const extStart = { x: hip.x - nx * rw * 0.3, y: hip.y - ny * rh * 0.3 };
-      const extEnd   = { x: shoulder.x + nx * rw * 0.5, y: shoulder.y + ny * rh * 0.5 };
-
-      ctx.save();
-      ctx.strokeStyle = 'rgba(168,85,247,0.85)';
-      ctx.lineWidth = Math.max(2, rw * 0.005);
-      ctx.setLineDash([8, 5]);
-      ctx.beginPath();
-      ctx.moveTo(extStart.x, extStart.y);
-      ctx.lineTo(extEnd.x, extEnd.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Label
-      const fs = Math.max(9, rw * 0.025);
-      ctx.font = `600 ${fs}px system-ui`;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(extEnd.x - 2, extEnd.y - fs - 2, 80, fs + 6);
-      ctx.fillStyle = 'rgba(168,85,247,1)';
-      ctx.fillText('Swing Plane', extEnd.x + 2, extEnd.y);
-      ctx.restore();
-    }
-  }
-
-  // ===== CLUB HEAD TRACER =====
-  if (overlayState.clubTracer) {
-    // Estimate club head from wrist + elbow direction (proxy)
-    const wristIdx = lms[15] ? 15 : 16;
-    const elbowIdx = lms[13] ? 13 : 14;
-    if (lms[wristIdx] && lms[elbowIdx]) {
-      const wrist = lmPos(wristIdx);
-      const elbow = lmPos(elbowIdx);
-      // Extrapolate club head beyond wrist (1.3x the forearm length beyond wrist)
-      const dx = wrist.x - elbow.x;
-      const dy = wrist.y - elbow.y;
-      const clubHead = { x: wrist.x + dx * 1.3, y: wrist.y + dy * 1.3 };
-
-      // Store point
-      if (!clubTracerPoints._frameCount) clubTracerPoints._frameCount = 0;
-      clubTracerPoints._frameCount++;
-      clubTracerPoints.push({ ...clubHead, t: clubTracerPoints._frameCount });
-      if (clubTracerPoints.length > 60) clubTracerPoints.shift(); // keep last 60
-
-      // Draw trail
-      if (clubTracerPoints.length > 1) {
-        ctx.save();
-        for (let ci = 1; ci < clubTracerPoints.length; ci++) {
-          const alpha = ci / clubTracerPoints.length;
-          ctx.strokeStyle = `rgba(251,146,60,${alpha * 0.9})`;
-          ctx.lineWidth = Math.max(1.5, rw * 0.004) * alpha;
-          ctx.beginPath();
-          ctx.moveTo(clubTracerPoints[ci-1].x, clubTracerPoints[ci-1].y);
-          ctx.lineTo(clubTracerPoints[ci].x, clubTracerPoints[ci].y);
-          ctx.stroke();
-        }
-        // Club head dot
-        const last = clubTracerPoints[clubTracerPoints.length - 1];
-        ctx.fillStyle = '#fb923c';
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(last.x, last.y, Math.max(5, rw * 0.012), 0, Math.PI*2);
-        ctx.fill(); ctx.stroke();
-        ctx.restore();
-      }
-    }
-  }
 }
 
 // --- Drill generation ---
@@ -2135,21 +2098,13 @@ function resetAll() {
   videoFile=null; videoUrl=null; analysisData=null; chatHist=[]; showingAll=false; showingAllAngles=false;
   poseInstance=null; frameData={};
   selectedView=null;
-  clubTracerPoints = []; clubTracerActive = false;
-  cropEnabled = false;
-
-  // Reset all overlay toggles to OFF
-  overlayState = { skeleton:false, angles:false, lines:false, errors:false, swingPlane:false, clubTracer:false };
-  ['togSkeleton','togAngles','togLines','togErrors','togCrop','togSwingPlane','togClubTracer'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.classList.remove('on'); el.classList.add('off'); }
-  });
 
   // Reset view buttons
   document.getElementById('btnDTL').classList.remove('selected');
   document.getElementById('btnFaceOn').classList.remove('selected');
   document.getElementById('viewHint').classList.remove('show');
   const fs = document.getElementById('focusSection'); if(fs) fs.style.display='none';
+  const tc = document.getElementById('tempoCard'); if(tc) tc.style.display='none';
   document.getElementById('viewWarning').style.display='none';
 
   // Re-lock upload
@@ -2216,5 +2171,61 @@ function installPWA() {
   }
 }
 </script>
+  </div><!-- /tab-page home -->
+
+</div><!-- /pageHome -->
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="bottom-nav-item active" id="navHome" onclick="switchTab('home')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      <span class="bottom-nav-label">Home</span>
+    </button>
+    <button class="bottom-nav-item" id="navProgress" onclick="switchTab('progress')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span class="bottom-nav-label">Progress</span>
+    </button>
+    <button class="bottom-nav-item" id="navLearn" onclick="switchTab('learn')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      <span class="bottom-nav-label">Learn</span>
+    </button>
+    <button class="bottom-nav-item" id="navProfile" onclick="switchTab('profile')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span class="bottom-nav-label">Profile</span>
+    </button>
+  </nav>
+
+  <!-- Tab: Progress -->
+  <div class="tab-page" id="pageProgress">
+    <div style="max-width:600px;margin:0 auto;padding:20px 16px;">
+      <div class="coming-soon">
+        <div class="coming-soon-icon">📈</div>
+        <div class="coming-soon-title">Progress</div>
+        <div class="coming-soon-sub">Lihat riwayat skor swing kamu dari waktu ke waktu. Segera hadir!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Learn -->
+  <div class="tab-page" id="pageLearn">
+    <div style="max-width:600px;margin:0 auto;padding:20px 16px;">
+      <div class="coming-soon">
+        <div class="coming-soon-icon">📚</div>
+        <div class="coming-soon-title">Learn</div>
+        <div class="coming-soon-sub">Perpustakaan drill dan video tutorial untuk tingkatkan swing kamu. Segera hadir!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Profile -->
+  <div class="tab-page" id="pageProfile">
+    <div style="max-width:600px;margin:0 auto;padding:20px 16px;">
+      <div class="coming-soon">
+        <div class="coming-soon-icon">👤</div>
+        <div class="coming-soon-title">Profile</div>
+        <div class="coming-soon-sub">Profil golfer kamu, statistik, dan pengaturan akun. Segera hadir!</div>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
