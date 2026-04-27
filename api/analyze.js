@@ -120,6 +120,42 @@ export default async function handler(req, res) {
     const p7_shaft = detectP7Shaft(frames);
     const p7 = Math.round((p7_speed + p7_shaft) / 2);
 
+    // ====== TEMPO CALCULATION ======
+    const tempoData = (() => {
+      try {
+        const t0  = frames[0].timestamp;
+        const tP4 = frames[Math.min(p4, frames.length - 1)].timestamp;
+        const tP7 = frames[Math.min(p7, frames.length - 1)].timestamp;
+        const tEnd = frames[frames.length - 1].timestamp;
+
+        const backswing  = tP4 - t0;          // P1 → P4 (backswing)
+        const downswing  = tP7 - tP4;         // P4 → P7 (downswing)
+        const followThru = tEnd - tP7;        // P7 → finish
+
+        if (downswing <= 0) return null;
+
+        const ratio_bs = backswing / downswing;
+        const ratio_ft = followThru / downswing;
+
+        // Classify tempo
+        let tempoClass;
+        if (ratio_bs >= 3.0) tempoClass = 'Lambat & Terkontrol (seperti pro)';
+        else if (ratio_bs >= 2.0) tempoClass = 'Sedang';
+        else tempoClass = 'Terlalu Cepat di Backswing';
+
+        return {
+          backswing_ms: Math.round(backswing * 1000),
+          downswing_ms: Math.round(downswing * 1000),
+          follow_ms:    Math.round(followThru * 1000),
+          ratio: `${ratio_bs.toFixed(1)}:1:${ratio_ft.toFixed(1)}`,
+          backswing_to_downswing: parseFloat(ratio_bs.toFixed(2)),
+          classification: tempoClass
+        };
+      } catch(e) {
+        return null;
+      }
+    })();
+
     // ====== VIEW CONTEXT ======
     const viewCtx = buildViewContext(viewAngle);
     const viewLabel = viewAngle === 'dtl' ? 'Down the Line (DTL)' : viewAngle === 'face-on' ? 'Face On' : 'General';
@@ -203,14 +239,20 @@ Rules:
 - Semua teks dalam Bahasa Indonesia.
 - status: HANYA "good", "warn", atau "bad".`;
 
+    const tempoLine = tempoData
+      ? `- Tempo swing: ${tempoData.ratio} (backswing ${tempoData.backswing_ms}ms : downswing ${tempoData.downswing_ms}ms : follow ${tempoData.follow_ms}ms) — ${tempoData.classification}`
+      : '- Tempo swing: tidak dapat dihitung';
+
     const userPrompt = `Sudut kamera: ${viewLabel}
 
 Biomechanics engine mendeteksi:
 - P4 (top of backswing): frame ke-${p4}
 - P6 (shaft parallel down): frame ke-${p6 ?? 'tidak terdeteksi'}
 - P7 (impact): frame ke-${p7} (speed: ${p7_speed}, shaft: ${p7_shaft})
+${tempoLine}
 
 Gunakan sebagai referensi, validasi secara visual dari gambar.
+Sertakan analisa tempo dalam feedback P4 dan P7 jika relevan.
 Analisa semua 10 posisi dan return JSON sesuai schema.`;
 
     const callGPT = async (messages) => {
@@ -288,9 +330,12 @@ CRITICAL: Return ONLY raw JSON. Start with { end with }. Nothing else.' }] }
     if (!result.fix_drill) result.fix_drill = 'Hip Bump Drill';
     if (!result.fix_feel) result.fix_feel = 'Fokus pada transisi yang mulus dari backswing ke downswing.';
 
+    // Attach tempo to result for frontend display
+    if (tempoData) result.tempo = tempoData;
+
     return res.status(200).json({
       result,
-      debug: { p4, p6, p7, p7_speed, p7_shaft }
+      debug: { p4, p6, p7, p7_speed, p7_shaft, tempo: tempoData }
     });
 
   } catch (err) {
