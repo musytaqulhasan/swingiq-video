@@ -1009,22 +1009,35 @@ async function runFullAnalysis() {
 
 // --- Step 1: Upload to Cloudinary ---
 async function uploadToCloudinary(file) {
-  // iOS Safari fix: convert .mov to base64 data URL before FormData upload
-  // This avoids "string did not match expected pattern" on iOS
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   const isMov = file.name.toLowerCase().endsWith('.mov');
 
-  let uploadFile = file;
+  // iOS Safari: FormData fetch dengan .mov selalu gagal dengan "string did not match expected pattern"
+  // Solusi: baca file sebagai base64 dulu, kirim via JSON ke endpoint khusus
+  if (isIOS || isMov) {
+    setStatus('Membaca video untuk iOS...', 'run');
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result.split(',')[1]);
+      reader.onerror = () => reject(new Error('Gagal membaca file video'));
+      reader.readAsDataURL(file);
+    });
 
-  // On iOS with .mov, wrap in a Blob with explicit MIME type to help FormData
-  if (isIOS && isMov) {
-    uploadFile = new Blob([file], { type: 'video/mp4' });
-    uploadFile.name = file.name.replace(/\.mov$/i, '.mp4');
+    const res = await fetch('/api/upload-base64', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64, filename: file.name, mimetype: 'video/mp4' })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
+    addMsg('ai', `Video tersimpan di cloud. URL: <a href="${data.url}" target="_blank" style="color:var(--accent);">lihat video</a>`);
+    return data.url;
   }
 
+  // Desktop: standard FormData
   const formData = new FormData();
-  formData.append('video', uploadFile, uploadFile.name || file.name);
-  const res = await fetch(UPLOAD, { method:'POST', body:formData });
+  formData.append('video', file);
+  const res = await fetch(UPLOAD, { method: 'POST', body: formData });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
   addMsg('ai', `Video tersimpan di cloud. URL: <a href="${data.url}" target="_blank" style="color:var(--accent);">lihat video</a>`);
