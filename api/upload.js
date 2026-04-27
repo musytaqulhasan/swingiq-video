@@ -19,16 +19,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const form = new IncomingForm({ maxFileSize: 100 * 1024 * 1024 });
+    const form = new IncomingForm({
+      maxFileSize: 100 * 1024 * 1024,
+      keepExtensions: true,
+    });
     const [, files] = await form.parse(req);
     const file = Array.isArray(files.video) ? files.video[0] : files.video;
     if (!file) return res.status(400).json({ error: 'No video file received' });
 
+    // iOS Safari sends .mov as video/quicktime — treat it like video/mp4 for Cloudinary
+    const mimeType = file.mimetype || 'video/mp4';
+    const isQuicktime = mimeType === 'video/quicktime' || (file.originalFilename || file.newFilename || '').toLowerCase().endsWith('.mov');
+
     // Read file and convert to base64
     const fileBuffer = readFileSync(file.filepath);
     const base64Data = fileBuffer.toString('base64');
-    const mimeType = file.mimetype || 'video/mp4';
-    const dataUri = `data:${mimeType};base64,${base64Data}`;
+    const finalMime = isQuicktime ? 'video/mp4' : (file.mimetype || 'video/mp4');
+    const dataUri = `data:${finalMime};base64,${base64Data}`;
 
     // Use Basic auth (signed upload without preset)
     const timestamp = Math.floor(Date.now() / 1000);
