@@ -1,6 +1,7 @@
 {
   "name": "swingiq-video",
   "version": "1.0.0",
+  "type": "module",
   "description": "SwingIQ Video — AI Golf Analyzer with Cloudinary + GPT-4o + MediaPipe",
   "engines": { "node": "20.x" },
   "dependencies": {
