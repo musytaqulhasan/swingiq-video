@@ -171,11 +171,14 @@ Analyze all 8 positions and return the JSON.`;
     console.log('finish_reason:', choice.finish_reason, 'tokens:', d.usage?.completion_tokens);
 
     let raw = choice.message.content.trim().replace(/```json|```/g, '').trim();
+    console.log('GPT RAW (first 500):', raw.substring(0, 500));
+    console.log('GPT RAW length:', raw.length);
+
     const start = raw.indexOf('{');
     const end = raw.lastIndexOf('}');
 
     if (start === -1 || end === -1) {
-      return res.status(500).json({ error: 'GPT tidak return JSON valid', debug: raw.substring(0, 300) });
+      return res.status(500).json({ error: 'GPT tidak return JSON valid', debug: raw.substring(0, 500) });
     }
 
     let result;
