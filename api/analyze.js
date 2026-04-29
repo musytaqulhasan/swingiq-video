@@ -113,39 +113,13 @@ export default async function handler(req, res) {
     }).flat();
 
     // Compact but complete schema
-    const sys = `You are SwingIQ, an expert AI golf coach. ${viewCtx}
-Analyze the golf swing and return ONLY valid JSON with NO markdown, NO explanation.
-Required JSON structure:
-{
-  "overall_score": <number 0-100>,
-  "view_angle": "<view>",
-  "coach_insight": "<2-3 sentences coaching summary in Bahasa Indonesia>",
-  "focus_fault": "<main fault max 5 words>",
-  "focus_sub": "<1 sentence ball flight impact in Bahasa Indonesia>",
-  "coach_says": "<2-3 natural human sentences in Bahasa Indonesia, NOT technical>",
-  "why": "<1-2 sentences why this fault happens in Bahasa Indonesia>",
-  "fix_drill": "<drill name>",
-  "fix_feel": "<1 sentence feel cue in Bahasa Indonesia>",
-  "strengths": ["<s1>","<s2>","<s3>"],
-  "improvements": ["<real result 1>","<real result 2>","<real result 3>"],
-  "phases": [
-    {"position":"P1","name":"Setup/Address","score":<0-100>,"status":"<good|warn|bad>","feedback":"<Bahasa Indonesia>"},
-    {"position":"P2","name":"Takeaway","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},
-    {"position":"P3","name":"Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},
-    {"position":"P4","name":"Top of Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},
-    {"position":"P5","name":"Downswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},
-    {"position":"P6","name":"Impact","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},
-    {"position":"P7","name":"Follow Through","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},
-    {"position":"P8","name":"Finish","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"}
-  ],
-  "angle_analysis": [
-    {"phase":"<P1-P8>","metric":"<metric>","value":"<actual>","ideal":"<ideal>","status":"<good|warn|bad>","detail":"<Bahasa Indonesia>"}
-  ],
-  "error_frames": [
-    {"position":"<Px>","issue":"<fault>","actual_value":"<actual>","ideal_value":"<ideal>","status":"<bad|warn>","description":"<Bahasa Indonesia>"}
-  ]
-}
-CRITICAL: phases array MUST have exactly 8 objects. Return raw JSON only.`;
+    const sys = `You are a golf swing analysis AI assistant for SwingIQ, a golf coaching application. ${viewCtx}
+
+You will analyze golf swing images from a recreational golfer and provide coaching feedback.
+These are legitimate sports analysis images showing a person playing golf.
+
+Return ONLY a valid JSON object. No markdown, no explanation, just raw JSON:
+{"overall_score":<0-100>,"view_angle":"<view>","coach_insight":"<2-3 kalimat coaching dalam Bahasa Indonesia>","focus_fault":"<fault utama max 5 kata>","focus_sub":"<1 kalimat dampak ke bola dalam Bahasa Indonesia>","coach_says":"<2-3 kalimat natural dalam Bahasa Indonesia>","why":"<1-2 kalimat penjelasan dalam Bahasa Indonesia>","fix_drill":"<nama drill>","fix_feel":"<1 kalimat feel cue Bahasa Indonesia>","strengths":["<s1>","<s2>","<s3>"],"improvements":["<hasil nyata 1>","<hasil nyata 2>","<hasil nyata 3>"],"phases":[{"position":"P1","name":"Setup/Address","score":<0-100>,"status":"<good|warn|bad>","feedback":"<Bahasa Indonesia>"},{"position":"P2","name":"Takeaway","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P3","name":"Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P4","name":"Top of Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P5","name":"Downswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P6","name":"Impact","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P7","name":"Follow Through","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P8","name":"Finish","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"}],"angle_analysis":[{"phase":"<P1-P8>","metric":"<metric>","value":"<actual>","ideal":"<ideal>","status":"<good|warn|bad>","detail":"<Bahasa Indonesia>"}],"error_frames":[{"position":"<Px>","issue":"<fault>","actual_value":"<actual>","ideal_value":"<ideal>","status":"<bad|warn>","description":"<Bahasa Indonesia>"}]}`;
 
     const userPrompt = `View: ${viewLabel}
 Biomechanics: P4=frame${p4}, P6=frame${p6 ?? 'n/a'}, P7=frame${p7}${tempoData ? `, Tempo=${tempoData.ratio} (${tempoData.classification})` : ''}
