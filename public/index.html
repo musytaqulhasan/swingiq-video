@@ -1144,14 +1144,31 @@ async function extractFrames(videoEl, count) {
       };
 
       function tryDraw() {
+        let drawOk = false;
         try {
           ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          // Check if frame is all black (blank) by sampling pixels
+          const sample = ctx.getImageData(canvas.width/2, canvas.height/2, 10, 10);
+          const bright = sample.data.reduce((s, v, i) => i % 4 !== 3 ? s + v : s, 0);
+          drawOk = bright > 100; // non-black if brightness > threshold
         } catch(e) {
-          ctx.fillStyle = '#1a1a1a';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          drawOk = false;
         }
+
+        if (!drawOk && attempts < 3) {
+          // Retry: re-seek and wait
+          attempts++;
+          console.log('Frame blank at', time, '— retry', attempts);
+          setTimeout(() => {
+            videoEl.currentTime = Math.min(time, duration - 0.05);
+            videoEl.onseeked = () => { clearTimeout(seekTimeout); tryDraw(); };
+          }, 200 * attempts);
+          return;
+        }
+
         const base64 = canvas.toDataURL('image/jpeg', 0.65).split(',')[1];
         frames.push({ base64, timestamp: parseFloat(time.toFixed(3)) });
+        console.log(`Frame ${captured+1}/${count} captured — bright=${!drawOk?'BLANK':'OK'}`);
         captured++;
         if (captured < count) {
           captureAt(interval * (captured + 1));
@@ -1170,12 +1187,31 @@ async function extractFrameAt(videoEl, timestamp) {
     const canvas = document.createElement('canvas');
     canvas.width = 640; canvas.height = 360;
     const ctx = canvas.getContext('2d');
-    videoEl.currentTime = timestamp;
-    videoEl.onseeked = () => {
-      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    let retries = 0;
+
+    function trySeekAndDraw() {
+      videoEl.currentTime = timestamp;
+      const t = setTimeout(() => drawFrame(), 2000); // fallback timeout
+      videoEl.onseeked = () => { clearTimeout(t); drawFrame(); };
+    }
+
+    function drawFrame() {
+      try {
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        const sample = ctx.getImageData(canvas.width/2, canvas.height/2, 10, 10);
+        const bright = sample.data.reduce((s, v, i) => i % 4 !== 3 ? s + v : s, 0);
+        if (bright < 100 && retries < 3) {
+          retries++;
+          console.log('HQ frame blank at', timestamp, '— retry', retries);
+          setTimeout(trySeekAndDraw, 200 * retries);
+          return;
+        }
+      } catch(e) {}
       const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
       resolve({ base64, timestamp });
-    };
+    }
+
+    trySeekAndDraw();
   });
 }
 
