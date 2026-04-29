@@ -169,80 +169,13 @@ export default async function handler(req, res) {
       ];
     }).flat();
 
-    // ====== SYSTEM PROMPT WITH COMPLETE JSON SCHEMA ======
-    const sys = `You are SwingIQ, an expert AI golf coach analyzing a golf swing video frame by frame.
+    // ====== SYSTEM PROMPT - COMPACT ======
+    const sys = `You are SwingIQ, an expert AI golf coach. ${viewCtx.cameraDesc}
 
-${viewCtx.cameraDesc}
+Analyze the golf swing images and return ONLY this JSON (no markdown, no explanation):
+{"overall_score":<0-100>,"view_angle":"${viewLabel}","coach_insight":"<2-3 sentences in Bahasa Indonesia>","focus_fault":"<main fault, max 5 words>","focus_sub":"<1 sentence impact on ball flight>","coach_says":"<2-3 natural human sentences in Bahasa Indonesia>","why":"<1-2 sentences why this fault happens>","fix_drill":"<drill name>","fix_feel":"<1 sentence feel cue>","strengths":["<s1>","<s2>","<s3>"],"improvements":["<real result 1>","<real result 2>","<real result 3>"],"phases":[{"position":"P1","name":"Setup/Address","score":<0-100>,"status":"<good|warn|bad>","feedback":"<Bahasa Indonesia>"},{"position":"P2","name":"Takeaway","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P3","name":"Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P4","name":"Top of Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P5","name":"Downswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P6","name":"Impact","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P7","name":"Follow Through","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P8","name":"Finish","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"}],"angle_analysis":[{"phase":"<P1-P8>","metric":"<metric>","value":"<actual>","ideal":"<ideal>","status":"<good|warn|bad>","detail":"<Bahasa Indonesia>"}],"error_frames":[{"position":"<Px>","issue":"<fault>","actual_value":"<actual>","ideal_value":"<ideal>","status":"<bad|warn>","description":"<Bahasa Indonesia>"}]}
 
-${viewCtx.focusAreas}
-
-You will receive 8 images representing positions P1 through P8 of a golf swing.
-You MUST return ONLY a valid JSON object with EXACTLY this structure. No explanation, no markdown, no extra text — just raw JSON:
-
-{
-  "overall_score": <number 0-100>,
-  "view_angle": "${viewLabel}",
-
-  "coach_insight": "<2-3 kalimat coaching keseluruhan dalam Bahasa Indonesia. WAJIB DIISI.>",
-
-  "focus_fault": "<nama fault utama yang paling kritis, singkat, max 5 kata. Contoh: Over the Top, Early Release, Reverse Pivot>",
-  "focus_sub": "<1 kalimat: dampak fault ini ke ball flight. Contoh: Ini penyebab bola kamu sering slice ke kanan.>",
-
-  "coach_says": "<2-3 kalimat BAHASA MANUSIA — seperti coach bicara langsung ke pemain. Bukan teknis. Contoh: Di awal swing kamu sudah cukup bagus. Tapi saat downswing, tangan kamu bergerak ke luar, bukan turun ke dalam. Makanya arah bola jadi belok ke kanan.>",
-
-  "why": "<1-2 kalimat penjelasan sederhana KENAPA fault ini terjadi secara biomekanik. Contoh: Bahu kamu terbuka terlalu cepat, sementara pinggul belum sempat rotate. Akibatnya tangan terlempar keluar.>",
-
-  "fix_drill": "<nama drill yang paling relevan untuk fault ini. Pilih dari: Elbow Tuck Drill, Shoulder Turn Drill, Hip Bump Drill, Weight Transfer Drill, Alignment Stick Setup, Hip Hinge Drill, Flat Left Wrist Drill, Swing Plane Drill, Pause at Top Drill, Lag Retention Drill, Impact Bag Drill, Pump Drill, Hip Clearance Drill, Feet Together Drill, Full Finish Drill, Extension Drill>",
-  "fix_feel": "<1 kalimat feel cue — apa yang harus dirasakan pemain saat melakukan drill. Contoh: Turunkan tangan ke dalam, bukan lempar ke depan.>",
-
-  "strengths": ["<kekuatan 1>", "<kekuatan 2>", "<kekuatan 3>"],
-  "improvements": ["<apa yang terjadi kalau fault ini diperbaiki, bukan teknis tapi hasil nyata. Contoh: Bola akan lebih lurus>", "<Slice berkurang>", "<Jarak bisa nambah 15-25 meter>"],
-  "phases": [
-    { "position": "P1", "name": "Setup/Address", "score": <number 0-100>, "status": "<good|warn|bad>", "feedback": "<feedback dalam Bahasa Indonesia>" },
-    { "position": "P2", "name": "Takeaway", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P3", "name": "Backswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P4", "name": "Top of Backswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P5", "name": "Downswing", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P6", "name": "Impact", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P7", "name": "Follow Through", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" },
-    { "position": "P8", "name": "Finish", "score": <number>, "status": "<good|warn|bad>", "feedback": "<feedback>" }
-  ],
-  "angle_analysis": [
-    {
-      "phase": "<posisi>",
-      "metric": "<metrik spesifik untuk sudut ${viewLabel}, contoh: ${viewCtx.angleMetrics[0]}>",
-      "value": "<nilai aktual dari video>",
-      "ideal": "<nilai ideal>",
-      "status": "<good|warn|bad>",
-      "detail": "<penjelasan dampak dalam Bahasa Indonesia>"
-    }
-  ],
-  "error_frames": [
-    {
-      "position": "<posisi bermasalah>",
-      "issue": "<nama fault>",
-      "actual_value": "<apa yang terlihat>",
-      "ideal_value": "<yang seharusnya>",
-      "status": "<bad|warn>",
-      "description": "<penjelasan dan cara perbaikan dalam Bahasa Indonesia>"
-    }
-  ]
-}
-
-Rules:
-- coach_insight, coach_says, why, focus_fault, fix_drill, fix_feel WAJIB semua diisi. TIDAK BOLEH null atau kosong.
-- coach_says harus bahasa manusia natural, bukan bahasa teknis/biomechanics.
-- improvements harus berisi HASIL NYATA yang bisa dirasakan pemain (bukan deskripsi teknis).
-- phases HARUS tepat 8 entry (P1 sampai P8).
-- angle_analysis HARUS minimal 5 entry.
-- error_frames: hanya posisi bad/warn. Boleh [] jika swing bagus.
-- Semua teks dalam Bahasa Indonesia.
-- status: HANYA "good", "warn", atau "bad".`;
-
-    const tempoLine = tempoData
-      ? `- Tempo swing: ${tempoData.ratio} (backswing ${tempoData.backswing_ms}ms : downswing ${tempoData.downswing_ms}ms : follow ${tempoData.follow_ms}ms) — ${tempoData.classification}`
-      : '- Tempo swing: tidak dapat dihitung';
-
+Rules: phases MUST have exactly 8 entries. All text in Bahasa Indonesia. status only "good","warn","bad".`
     const userPrompt = `Sudut kamera: ${viewLabel}
 
 Biomechanics engine mendeteksi:
@@ -262,11 +195,16 @@ Analisa semua 10 posisi dan return JSON sesuai schema.`;
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${OPENAI_KEY}`
         },
-        body: JSON.stringify({ model: 'gpt-4o', max_tokens: 3000, messages })
+        body: JSON.stringify({ model: 'gpt-4o', max_tokens: 4000, messages })
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error?.message || 'OpenAI error');
-      let raw = d.choices[0].message.content.trim();
+      const choice = d.choices[0];
+      console.log("finish_reason:", choice.finish_reason, "| tokens used:", d.usage?.completion_tokens);
+      if (choice.finish_reason === 'length') {
+        console.log("WARNING: Response truncated! Increase max_tokens.");
+      }
+      let raw = choice.message.content.trim();
       raw = raw.replace(/```json[\s\S]*?```/g, m => m.replace(/```json|```/g, '')).replace(/```/g, '').trim();
       return raw;
     };
@@ -310,8 +248,22 @@ Analisa semua 10 posisi dan return JSON sesuai schema.`;
     if (!result.coach_insight) {
       result.coach_insight = `Analisa swing dari sudut ${viewLabel} selesai. Perhatikan konsistensi posisi dan tempo swing untuk hasil yang lebih baik.`;
     }
+    console.log("GPT result keys:", Object.keys(result));
+    console.log("GPT phases:", JSON.stringify(result.phases)?.substring(0, 200));
+    console.log("GPT overall_score:", result.overall_score);
+
     if (!Array.isArray(result.phases) || result.phases.length === 0) {
-      return res.status(500).json({ error: 'GPT tidak return phases', debug: JSON.stringify(result).substring(0, 300) });
+      // Try alternate field names GPT might use
+      const altPhases = result.swing_phases || result.positions || result.analysis;
+      if (Array.isArray(altPhases) && altPhases.length > 0) {
+        result.phases = altPhases;
+      } else {
+        return res.status(500).json({
+          error: 'GPT tidak return phases',
+          result_keys: Object.keys(result),
+          debug: JSON.stringify(result).substring(0, 500)
+        });
+      }
     }
     // Ensure exactly 8 phases
     if (result.phases.length > 8) result.phases = result.phases.slice(0, 8);
