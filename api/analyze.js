@@ -282,9 +282,7 @@ Analisa semua 10 posisi dan return JSON sesuai schema.`;
       console.log("Attempt 1 no JSON, retrying...", raw.substring(0, 200));
       raw = await callGPT([
         { role: 'system', content: 'You are a JSON generator. Return ONLY a valid JSON object. No text before or after. No markdown. Start with { and end with }.' },
-        { role: 'user', content: [...imageContent, { type: 'text', text: userPrompt + '
-
-CRITICAL: Return ONLY raw JSON. Start with { end with }. Nothing else.' }] }
+        { role: 'user', content: [...imageContent, { type: 'text', text: userPrompt + '\n\nCRITICAL: Return ONLY raw JSON. Start with { end with }. Nothing else.' }] }
       ]);
     }
 
