@@ -898,9 +898,13 @@ async function runFullAnalysis() {
   const isMov = videoFile.name.toLowerCase().endsWith('.mov');
   console.log('iOS:', isIOS, 'isMov:', isMov, 'file:', videoFile.name, 'size:', videoFile.size);
 
+  // Show debug info on screen for iOS (no console access)
+  setStatus(`iOS:${isIOS} MOV:${isMov} size:${(videoFile.size/1024/1024).toFixed(1)}MB`, 'run');
+  await new Promise(r => setTimeout(r, 500)); // let status render
+
   try {
     // Step 1: Upload to Cloudinary
-    setStatus(`Step 1: Upload (iOS:${isIOS}, mov:${isMov})...`, 'run');
+    setStatus(`Step 1: Upload...`, 'run');
     const uploadedUrl = await uploadToCloudinary(videoFile);
     videoUrl = uploadedUrl;
     setStatus('Step 1 OK. Step 2: Load video...', 'run');
@@ -1004,8 +1008,9 @@ async function runFullAnalysis() {
     setStatus('Analisa P1–P10 selesai!', 'ok');
 
   } catch(e) {
+    const stack = (e.stack || '').split('\n').slice(0,3).join(' | ');
     setStatus('Error: ' + e.message, 'err');
-    addMsg('ai', 'Terjadi error: ' + e.message);
+    addMsg('ai', `Terjadi error: ${e.message}<br><small style="color:#aaa;font-size:10px">${stack}</small>`);
     console.error(e);
   }
   document.getElementById('analyzeBtn').disabled = false;
