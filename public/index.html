@@ -906,24 +906,27 @@ async function runFullAnalysis() {
     setStatus('Step 1 OK. Step 2: Load video...', 'run');
 
     // Step 2: Load video in player
-    const localUrl = await new Promise((resolve, reject) => {
-      if (isIOS || isMov) {
-        setStatus('Step 2: FileReader (iOS path)...', 'run');
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.onerror = (e) => reject(new Error('FileReader error: ' + e));
-        reader.readAsDataURL(videoFile);
-      } else {
-        try {
-          resolve(URL.createObjectURL(videoFile));
-        } catch(e) {
+    // iOS: use blob URL directly — data URL for large files causes WebKit error
+    // Upload already handled via base64 JSON separately
+    let localUrl;
+    if (isIOS || isMov) {
+      setStatus('Step 2: Creating blob URL (iOS)...', 'run');
+      try {
+        // Force video/mp4 MIME type for iOS compatibility
+        const blob = new Blob([videoFile], { type: 'video/mp4' });
+        localUrl = URL.createObjectURL(blob);
+      } catch(e) {
+        console.log('Blob URL failed, trying FileReader:', e.message);
+        localUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = e => resolve(e.target.result);
+          reader.onload = ev => resolve(ev.target.result);
           reader.onerror = reject;
           reader.readAsDataURL(videoFile);
-        }
+        });
       }
-    });
+    } else {
+      localUrl = URL.createObjectURL(videoFile);
+    }
     setStatus('Step 2 OK. Loading player...', 'run');
     loadVideoPlayer(localUrl);
 
@@ -1072,6 +1075,21 @@ async function uploadToCloudinary(file) {
 // --- Step 2: Load video player ---
 function loadVideoPlayer(src) {
   const vid = document.getElementById('videoPlayer');
+  // iOS Safari: data URLs for large .mov files cause "string did not match" error
+  // Convert data URL back to blob URL for video playback
+  if (src.startsWith('data:') && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
+    try {
+      const arr = src.split(',');
+      const mime = arr[0].match(/:(.*?);/)[1];
+      const bstr = atob(arr[1]);
+      const u8arr = new Uint8Array(bstr.length);
+      for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i);
+      const blob = new Blob([u8arr], { type: 'video/mp4' }); // force mp4 for iOS
+      src = URL.createObjectURL(blob);
+    } catch(e) {
+      console.log('Blob conversion failed, using data URL:', e.message);
+    }
+  }
   vid.src = src;
   vid.setAttribute('playsinline', ''); // Required for iOS inline playback
   vid.setAttribute('webkit-playsinline', ''); // Older iOS
