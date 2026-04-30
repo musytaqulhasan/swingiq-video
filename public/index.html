@@ -1030,22 +1030,27 @@ async function uploadToCloudinary(file) {
   console.log('uploadToCloudinary - isIOS:', isIOS, 'isMov:', isMov);
 
   if (isIOS || isMov) {
-    // iOS path: use FormData with Blob (force video/mp4 MIME) — avoids base64 string size crash
-    console.log('Using iOS FormData+Blob path...');
+    // iOS Safari: use XMLHttpRequest instead of fetch — fetch with FormData throws WebKit error on iOS
+    console.log('Using iOS XHR path...');
     setStatus('iOS: Mengupload video...', 'run');
 
-    // Re-wrap as mp4 Blob to fix MIME type, use FormData (no base64 conversion needed)
-    const mp4Blob = new Blob([await file.arrayBuffer()], { type: 'video/mp4' });
     const formData = new FormData();
-    formData.append('video', mp4Blob, file.name.replace(/\.mov$/i, '.mp4'));
+    formData.append('video', file, file.name);
 
-    const res = await fetch(UPLOAD, { method: 'POST', body: formData });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch(e) {
-      throw new Error('Server error: ' + text.substring(0, 100));
-    }
-    if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
+    const data = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', UPLOAD, true);
+      xhr.onload = () => {
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch(e) { reject(new Error('Server error: ' + xhr.responseText.substring(0, 100))); }
+      };
+      xhr.onerror = () => reject(new Error('Network error (XHR)'));
+      xhr.ontimeout = () => reject(new Error('Upload timeout'));
+      xhr.timeout = 120000; // 2 min timeout
+      xhr.send(formData);
+    });
+
+    if (data.error) throw new Error(data.error);
     addMsg('ai', `Video tersimpan di cloud. URL: <a href="${data.url}" target="_blank" style="color:var(--accent);">lihat video</a>`);
     return data.url;
   }
