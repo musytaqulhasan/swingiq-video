@@ -1030,34 +1030,21 @@ async function uploadToCloudinary(file) {
   console.log('uploadToCloudinary - isIOS:', isIOS, 'isMov:', isMov);
 
   if (isIOS || isMov) {
-    // iOS path: FileReader → base64 → JSON
-    console.log('Using iOS base64 path...');
-    setStatus('iOS: Membaca file sebagai base64...', 'run');
-    
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => {
-        const result = e.target.result;
-        console.log('FileReader done, result length:', result?.length, 'type:', result?.substring(0,30));
-        resolve(result.split(',')[1]);
-      };
-      reader.onerror = (e) => {
-        console.error('FileReader error:', e);
-        reject(new Error('FileReader gagal: ' + JSON.stringify(e)));
-      };
-      reader.readAsDataURL(file);
-    });
+    // iOS path: use FormData with Blob (force video/mp4 MIME) — avoids base64 string size crash
+    console.log('Using iOS FormData+Blob path...');
+    setStatus('iOS: Mengupload video...', 'run');
 
-    console.log('base64 length:', base64?.length, 'sending to /api/upload-base64...');
-    setStatus('iOS: Mengupload ke Cloudinary...', 'run');
+    // Re-wrap as mp4 Blob to fix MIME type, use FormData (no base64 conversion needed)
+    const mp4Blob = new Blob([await file.arrayBuffer()], { type: 'video/mp4' });
+    const formData = new FormData();
+    formData.append('video', mp4Blob, file.name.replace(/\.mov$/i, '.mp4'));
 
-    const res = await fetch('/api/upload-base64', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64, filename: file.name, mimetype: 'video/mp4' })
-    });
-    const data = await res.json();
-    console.log('upload-base64 response:', res.status, data?.url ? 'URL OK' : data?.error);
+    const res = await fetch(UPLOAD, { method: 'POST', body: formData });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) {
+      throw new Error('Server error: ' + text.substring(0, 100));
+    }
     if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
     addMsg('ai', `Video tersimpan di cloud. URL: <a href="${data.url}" target="_blank" style="color:var(--accent);">lihat video</a>`);
     return data.url;
