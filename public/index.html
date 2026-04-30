@@ -890,7 +890,7 @@ async function runFullAnalysis() {
   const radarCard = document.getElementById('radarCard');
   if (radarCard) radarCard.style.display = 'none';
   const overlayCanvas = document.getElementById('overlayCanvas');
-  overlayCanvas.getContext('2d').clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  if (overlayCanvas) overlayCanvas.getContext('2d').clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
   addMsg('user', `Analisa video swing saya: ${videoFile.name}`);
 
@@ -910,24 +910,11 @@ async function runFullAnalysis() {
     setStatus('Step 1 OK. Step 2: Load video...', 'run');
 
     // Step 2: Load video in player
-    // iOS: use blob URL directly — data URL for large files causes WebKit error
-    // Upload already handled via base64 JSON separately
     let localUrl;
     if (isIOS || isMov) {
-      setStatus('Step 2: Creating blob URL (iOS)...', 'run');
-      try {
-        // Force video/mp4 MIME type for iOS compatibility
-        const blob = new Blob([videoFile], { type: 'video/mp4' });
-        localUrl = URL.createObjectURL(blob);
-      } catch(e) {
-        console.log('Blob URL failed, trying FileReader:', e.message);
-        localUrl = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = ev => resolve(ev.target.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(videoFile);
-        });
-      }
+      // iOS: use the Cloudinary URL directly — avoids ALL local blob/dataURL issues
+      setStatus('Step 2: Loading from cloud (iOS)...', 'run');
+      localUrl = uploadedUrl;
     } else {
       localUrl = URL.createObjectURL(videoFile);
     }
@@ -1080,21 +1067,6 @@ async function uploadToCloudinary(file) {
 // --- Step 2: Load video player ---
 function loadVideoPlayer(src) {
   const vid = document.getElementById('videoPlayer');
-  // iOS Safari: data URLs for large .mov files cause "string did not match" error
-  // Convert data URL back to blob URL for video playback
-  if (src.startsWith('data:') && /iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    try {
-      const arr = src.split(',');
-      const mime = arr[0].match(/:(.*?);/)[1];
-      const bstr = atob(arr[1]);
-      const u8arr = new Uint8Array(bstr.length);
-      for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i);
-      const blob = new Blob([u8arr], { type: 'video/mp4' }); // force mp4 for iOS
-      src = URL.createObjectURL(blob);
-    } catch(e) {
-      console.log('Blob conversion failed, using data URL:', e.message);
-    }
-  }
   vid.src = src;
   vid.setAttribute('playsinline', ''); // Required for iOS inline playback
   vid.setAttribute('webkit-playsinline', ''); // Older iOS
