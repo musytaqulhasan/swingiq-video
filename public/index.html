@@ -522,6 +522,26 @@
 const PROXY = '/api/proxy';
 const UPLOAD = '/api/upload';
 
+// Global error handler — catches ALL JS errors including outside try-catch
+window.onerror = function(msg, src, line, col, err) {
+  const info = msg + ' | ' + (src||'').split('/').pop() + ':' + line;
+  try { setStatus('Error: ' + msg, 'err'); } catch(e2) {}
+  try {
+    const chatMsgs = document.getElementById('chatMsgs');
+    if (chatMsgs) {
+      const d = document.createElement('div');
+      d.className = 'msg ai';
+      d.innerHTML = '<div class="mlbl">DEBUG</div><div class="bubble ai" style="background:#fee2e2;color:#991b1b;font-size:11px"><code>' + info + '</code></div>';
+      chatMsgs.appendChild(d);
+      chatMsgs.scrollTop = 99999;
+    }
+  } catch(e2) {}
+  return false;
+};
+window.onunhandledrejection = function(e) {
+  try { setStatus('Promise Error: ' + (e.reason?.message||e.reason), 'err'); } catch(e2) {}
+};
+
 let videoFile = null;
 let videoUrl = null;
 let analysisData = null;
