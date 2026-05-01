@@ -456,9 +456,12 @@ body {
   padding: 20px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
+  min-height: 120px;
+  overflow: hidden;
 }
 .club-option:hover { border-color: var(--green); }
 .club-option.selected { 
@@ -466,19 +469,13 @@ body {
   background: var(--green-bg);
 }
 
-.club-icon {
-  width: 64px; height: 64px;
-  background: var(--bg-secondary);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36px;
+.club-info {
+  flex: 1;
+  z-index: 1;
 }
-
 .club-info h3 {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 800;
   color: var(--text);
   margin-bottom: 2px;
 }
@@ -487,18 +484,26 @@ body {
   color: var(--text-secondary);
 }
 
-.club-check {
-  margin-left: auto;
-  width: 28px; height: 28px;
+.club-img {
+  width: 120px;
+  height: 100px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.club-arrow {
+  width: 32px; height: 32px;
   border-radius: 50%;
   background: var(--green);
   color: white;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 16px;
+  flex-shrink: 0;
+  transition: background 0.2s;
 }
-.club-option.selected .club-check { display: flex; }
+.club-option.selected .club-arrow { background: var(--green-dark); }
 
 /* Angle Selection */
 .angle-grid {
@@ -857,7 +862,7 @@ body {
     <div class="login-bg-gradient"></div>
 
     <div class="login-top">
-      <div class="login-logo">SWING<span>IQ</span></div>
+      <div class="login-logo">Swing<span>IQ</span></div>
       <div class="login-tagline">Improve your swing.<br>Anytime. Anywhere.</div>
     </div>
 
@@ -993,25 +998,25 @@ body {
       <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Pilih club untuk analisa</p>
       <div class="club-grid">
         <div class="club-option" onclick="selectClub('iron', this)">
-          <div class="club-icon">🏌️</div>
           <div class="club-info">
             <h3>IRON</h3>
-            <p>(8i – 6i)</p>
+            <p>( 8i – 6i )</p>
           </div>
-          <div class="club-check">✓</div>
+          <img class="club-img" src="/Icon_-_Iron.png" alt="Iron">
+          <div class="club-arrow">›</div>
         </div>
         <div class="club-option" onclick="selectClub('driver', this)">
-          <div class="club-icon">🏌️‍♂️</div>
           <div class="club-info">
             <h3>DRIVER</h3>
             <p>Driver</p>
           </div>
-          <div class="club-check">✓</div>
+          <img class="club-img" src="/Icon_-_Driver.png" alt="Driver">
+          <div class="club-arrow">›</div>
         </div>
       </div>
       <div class="tips-box" style="margin-top:20px;">
         <span class="tips-icon">💡</span>
-        <p>Pilih club yang paling sering kamu gunakan agar analisa lebih akurat.</p>
+        <p>Untuk club iron gunakan mid range iron seperti 9i–6i</p>
       </div>
       <button class="continue-btn" id="clubContinueBtn" disabled onclick="navigateTo('pageAngle')">Lanjut Pilih Angle</button>
     </div>
