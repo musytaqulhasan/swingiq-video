@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SwingIQ — AI Golf Coach</title>
 <meta name="description" content="Improve your swing. Anytime. Anywhere. AI-powered golf coaching.">
-<meta name="theme-color" content="#16a34a">
+<meta name="theme-color" content="#0a0a0a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SwingIQ">
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon-192.png">
@@ -50,10 +50,14 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html {
+  background: #0a0a0a;
+}
 body { 
   background: var(--bg); 
   color: var(--text); 
   font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; 
+  min-height: 100dvh;
   min-height: 100vh;
   max-width: 430px;
   margin: 0 auto;
@@ -61,7 +65,7 @@ body {
 }
 
 /* ===== PAGE SYSTEM ===== */
-.page { display: none; min-height: 100vh; }
+.page { display: none; min-height: 100dvh; min-height: 100vh; }
 .page.active { display: flex; flex-direction: column; }
 
 /* ===== LOGIN PAGE ===== */
@@ -69,8 +73,10 @@ body {
   background: #0a0a0a;
   justify-content: flex-end;
   padding: 0;
+  padding-top: env(safe-area-inset-top);
   position: relative;
   overflow: hidden;
+  min-height: 100dvh;
   min-height: 100vh;
 }
 
