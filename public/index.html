@@ -50,11 +50,10 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html {
+html, body {
   background: #0a0a0a;
 }
 body { 
-  background: var(--bg); 
   color: var(--text); 
   font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; 
   min-height: 100dvh;
@@ -65,7 +64,7 @@ body {
 }
 
 /* ===== PAGE SYSTEM ===== */
-.page { display: none; min-height: 100dvh; min-height: 100vh; }
+.page { display: none; min-height: 100dvh; min-height: 100vh; background: var(--bg); }
 .page.active { display: flex; flex-direction: column; }
 
 /* ===== LOGIN PAGE ===== */
