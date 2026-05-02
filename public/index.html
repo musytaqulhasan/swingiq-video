@@ -1646,50 +1646,71 @@ function drawOverlay() {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, w, h);
 
+  // Use AI-provided overlay_data if available, else fallback defaults
+  const od = analysisData?.overlay_data || {};
   const isDTL = (selectedView === 'dtl');
+
   ctx.lineWidth = 2;
   ctx.setLineDash([]);
 
   if (isDTL) {
-    // Vertical line at spine (~35% from left)
-    const sx = w * 0.35;
-    ctx.strokeStyle = 'rgba(250,204,21,0.9)'; // yellow
+    // Spine vertical line (yellow dashed)
+    const sx = w * (od.spine_x ?? 0.35);
+    ctx.strokeStyle = 'rgba(250,204,21,0.9)';
     ctx.setLineDash([6, 4]);
     ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, h); ctx.stroke();
 
-    // Swing plane line: from bottom ~40% to top ~70% (diagonal ~45°)
-    ctx.strokeStyle = 'rgba(59,130,246,0.9)'; // blue
+    // Swing plane line (blue solid)
+    ctx.strokeStyle = 'rgba(59,130,246,0.9)';
     ctx.setLineDash([]);
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(w * 0.10, h * 0.85);
-    ctx.lineTo(w * 0.80, h * 0.10);
+    ctx.moveTo(w * (od.swing_plane_x1 ?? 0.10), h * (od.swing_plane_y1 ?? 0.85));
+    ctx.lineTo(w * (od.swing_plane_x2 ?? 0.80), h * (od.swing_plane_y2 ?? 0.10));
     ctx.stroke();
 
-    // Head position circle (top ~15-30% height, ~30-50% width)
-    ctx.strokeStyle = 'rgba(34,197,94,0.9)'; // green
-    ctx.lineWidth = 2;
+    // Head position circle (green dashed)
+    ctx.strokeStyle = 'rgba(34,197,94,0.9)';
     ctx.setLineDash([4, 3]);
     ctx.beginPath();
-    ctx.arc(w * 0.40, h * 0.14, w * 0.09, 0, Math.PI * 2);
+    ctx.arc(w * (od.head_cx ?? 0.40), h * (od.head_cy ?? 0.14), w * (od.head_r ?? 0.09), 0, Math.PI * 2);
     ctx.stroke();
+
+    // Labels
+    ctx.setLineDash([]);
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = 'rgba(250,204,21,0.9)';
+    ctx.fillText('Spine', sx + 4, 14);
+    ctx.fillStyle = 'rgba(59,130,246,0.9)';
+    ctx.fillText('Swing Plane', w * (od.swing_plane_x1 ?? 0.10) + 4, h * (od.swing_plane_y1 ?? 0.85) - 6);
+    ctx.fillStyle = 'rgba(34,197,94,0.9)';
+    ctx.fillText('Head', w * (od.head_cx ?? 0.40) + w * (od.head_r ?? 0.09) + 3, h * (od.head_cy ?? 0.14) + 4);
+
   } else {
-    // Face-on: vertical lines at body edges
-    const lx = w * 0.22; // left body edge
-    const rx = w * 0.78; // right body edge
+    // Face-on: left body edge
+    const lx = w * (od.body_left_x ?? 0.22);
+    const rx = w * (od.body_right_x ?? 0.78);
     ctx.strokeStyle = 'rgba(250,204,21,0.9)';
     ctx.setLineDash([6, 4]);
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, h); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(rx, 0); ctx.lineTo(rx, h); ctx.stroke();
 
-    // Head position circle
+    // Head circle
     ctx.strokeStyle = 'rgba(34,197,94,0.9)';
-    ctx.lineWidth = 2;
     ctx.setLineDash([4, 3]);
     ctx.beginPath();
-    ctx.arc(w * 0.50, h * 0.13, w * 0.09, 0, Math.PI * 2);
+    ctx.arc(w * (od.head_cx ?? 0.50), h * (od.head_cy ?? 0.13), w * (od.head_r ?? 0.09), 0, Math.PI * 2);
     ctx.stroke();
+
+    // Labels
+    ctx.setLineDash([]);
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = 'rgba(250,204,21,0.9)';
+    ctx.fillText('L', lx + 4, 14);
+    ctx.fillText('R', rx + 4, 14);
+    ctx.fillStyle = 'rgba(34,197,94,0.9)';
+    ctx.fillText('Head', w * (od.head_cx ?? 0.50) + w * (od.head_r ?? 0.09) + 3, h * (od.head_cy ?? 0.13) + 4);
   }
 }
 // ===== STATE =====
