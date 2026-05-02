@@ -2562,7 +2562,7 @@ function detectSwingPhases(trimmedFrames, poseData) {
   console.log(`[Phases] Baseline: ${idx.map((fi,i)=>`P${i+1}=f${fi}`).join(', ')}`);
 
   if (poseData && poseData.wY && poseData.wY.length === N) {
-    const { wY, vYs } = poseData;
+    const { wY } = poseData;
 
     // P4: min wristY in 30-60%
     const p4S = Math.floor(N*0.30), p4E = Math.floor(N*0.60);
@@ -2573,8 +2573,7 @@ function detectSwingPhases(trimmedFrames, poseData) {
     idx[3] = bestP4;
     console.log(`[Phases] P4=f${idx[3]}(wY=${minWY.toFixed(3)})`);
 
-    // P6: FIRST velocity direction change within 0.3s after P4
-    // Use raw frame-to-frame velocity (not smoothed) for precision
+    // P6: MAX ABSOLUTE VELOCITY within 0.3s after P4
     const p4Time = trimmedFrames[idx[3]].timestamp;
     const maxTime = p4Time + 0.3;
     let windowEnd = idx[3];
@@ -2582,40 +2581,24 @@ function detectSwingPhases(trimmedFrames, poseData) {
       if (trimmedFrames[i].timestamp > maxTime) break;
       windowEnd = i;
     }
-    console.log(`[Phases] Impact window: f${idx[3]+1}→f${windowEnd} (${(maxTime-p4Time).toFixed(2)}s)`);
+    console.log(`[Phases] Impact window: f${idx[3]+1}→f${windowEnd} (0.3s)`);
 
-    // Compute raw velocity per frame in window
-    let bestP6 = -1;
-    for (let i = idx[3]+2; i <= Math.min(windowEnd, N-2); i++) {
-      if (wY[i] === null || wY[i-1] === null || wY[i+1] === null) continue;
-      const vPrev = wY[i] - wY[i-1];   // negative = going up (screen coords)
-      const vNext = wY[i+1] - wY[i];   // positive = going down
-      // Impact: wrist was going DOWN (vPrev > 0) then starts going UP (vNext < 0)
-      if (vPrev > 0 && vNext < 0) {
-        bestP6 = i;
-        console.log(`[Phases] P6 FOUND by velocity change: f${i}(t=${trimmedFrames[i].timestamp.toFixed(3)}, vPrev=${vPrev.toFixed(4)}, vNext=${vNext.toFixed(4)})`);
-        break;
-      }
+    // Compute absolute velocity per frame
+    let bestP6 = -1, maxVel = 0;
+    const vels = [];
+    for (let i = idx[3]+1; i <= windowEnd; i++) {
+      if (wY[i] === null || wY[i-1] === null) { vels.push(0); continue; }
+      const v = Math.abs(wY[i] - wY[i-1]);
+      vels.push(v);
+      if (v > maxVel) { maxVel = v; bestP6 = i; }
     }
+    console.log(`[Phases] Velocities in window: ${vels.map(v=>v.toFixed(4)).join(', ')}`);
 
-    // Relaxed: vPrev > 0 and vNext near zero
-    if (bestP6 < 0) {
-      for (let i = idx[3]+2; i <= Math.min(windowEnd, N-2); i++) {
-        if (wY[i] === null || wY[i-1] === null || wY[i+1] === null) continue;
-        const vPrev = wY[i] - wY[i-1];
-        const vNext = wY[i+1] - wY[i];
-        if (vPrev > 0 && vNext <= 0.005) {
-          bestP6 = i;
-          console.log(`[Phases] P6 FOUND (relaxed): f${i}(vPrev=${vPrev.toFixed(4)}, vNext=${vNext.toFixed(4)})`);
-          break;
-        }
-      }
-    }
-
-    // Last fallback: use timing ratio (NOT max wristY)
-    if (bestP6 < 0) {
-      bestP6 = Math.min(idx[3] + Math.max(2, Math.round((windowEnd - idx[3]) * 0.7)), windowEnd);
-      console.log(`[Phases] P6 fallback (timing): f${bestP6}`);
+    if (bestP6 >= 0) {
+      console.log(`[Phases] P6 by max velocity: f${bestP6}(vel=${maxVel.toFixed(4)})`);
+    } else {
+      bestP6 = Math.min(idx[3] + Math.max(2, Math.round((windowEnd-idx[3])*0.7)), windowEnd);
+      console.log(`[Phases] P6 fallback: f${bestP6}`);
     }
 
     idx[5] = Math.max(idx[3]+2, bestP6);
@@ -2633,7 +2616,6 @@ function detectSwingPhases(trimmedFrames, poseData) {
     idx[6] = Math.min(bestP7, N-2);
   }
 
-  // Ensure strictly increasing
   for (let i=1; i<idx.length; i++) {
     if (idx[i]<=idx[i-1]) idx[i]=Math.min(idx[i-1]+1, N-1);
   }
