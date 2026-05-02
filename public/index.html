@@ -1678,31 +1678,43 @@ function renderPhasesGrid(phases) {
   const grid = document.getElementById('phasesGrid');
   if (!grid || !phases) return;
   grid.innerHTML = '';
-  const timeRatios = [0, 0.14, 0.28, 0.42, 0.56, 0.64, 0.78, 0.93];
   phases.slice(0, 8).forEach((p, i) => {
     const sc = p.score || 0;
     const cls = phaseScoreClass(sc);
     const iconKey = PHASE_ICON_KEYS[p.position] || 'p1';
     const iconSrc = PHASE_ICONS[iconKey] || '';
-    const ratio = timeRatios[i] || 0;
     const card = document.createElement('div');
     card.className = 'phase-card ' + cls;
     card.id = 'phaseCard_' + p.position;
     card.title = `${p.position}: ${p.name} (${sc})`;
     card.innerHTML = `<div class='phase-icon-wrap'><img src='${iconSrc}' alt='${p.position}'></div>`;
-    card.addEventListener('click', () => seekVideoToPhase(ratio, p.position));
+    card.addEventListener('click', () => seekVideoToPhase(p.position));
     grid.appendChild(card);
   });
 }
 
-function seekVideoToPhase(ratio, posId) {
+function seekVideoToPhase(posId) {
   const vid = document.getElementById('resultVideo');
   if (!vid || !vid.duration) return;
-  vid.currentTime = ratio * vid.duration;
+  
+  // Use stored real timestamps
+  const timestamps = window._phaseTimestamps || {};
+  const t = timestamps[posId];
+  
+  if (t !== undefined && t !== null) {
+    vid.currentTime = t;
+    console.log(`[Seek] ${posId} → t=${t.toFixed(3)}s`);
+  } else {
+    // Fallback: ratio-based
+    const fallbackRatios = { P1:0.05, P2:0.20, P3:0.35, P4:0.55, P5:0.62, P6:0.68, P7:0.80, P8:0.92 };
+    const ratio = fallbackRatios[posId] || 0;
+    vid.currentTime = ratio * vid.duration;
+    console.log(`[Seek] ${posId} → fallback ratio ${ratio}`);
+  }
+  
   document.querySelectorAll('.phase-card').forEach(c => c.classList.remove('active-phase'));
   const card = document.getElementById('phaseCard_' + posId);
   if (card) card.classList.add('active-phase');
-  // Pause at the frame so user can inspect — they can tap video or speed to resume
   vid.pause();
 }
 
@@ -2721,6 +2733,13 @@ async function startAnalysis() {
     clearInterval(interval);
     pctEl.textContent = '100%';
     analysisData = analyzeData.result;
+    
+    // Store phase timestamps for accurate video seeking
+    window._phaseTimestamps = {};
+    selectedPositions.forEach(p => {
+      window._phaseTimestamps[p.position] = p.timestamp;
+    });
+    console.log('[Phases] Stored timestamps:', window._phaseTimestamps);
 
     setTimeout(() => {
       renderResults(analysisData);
