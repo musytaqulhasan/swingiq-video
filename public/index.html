@@ -2279,167 +2279,189 @@ function extractPoseMetrics(landmarks) {
 }
 
 function detectPhasesFromPose(allPoseData) {
-  // Extract metrics for all valid frames
-  const metrics = allPoseData.map((pd, i) => ({
-    index: i,
-    timestamp: pd.timestamp,
-    metrics: pd.valid ? extractPoseMetrics(pd.landmarks) : null,
-    landmarks: pd.landmarks
-  })).filter(m => m.metrics !== null);
+  const VISIBILITY_THRESHOLD = 0.4;
+  const SMOOTH_WINDOW = 3;
+  const totalFrames = allPoseData.length;
   
-  if (metrics.length < 5) return null; // not enough data
+  if (totalFrames < 5) return null;
   
-  // Compute wrist speed between consecutive frames
-  for (let i = 0; i < metrics.length; i++) {
-    if (i === 0) { metrics[i].wristSpeed = 0; continue; }
-    const prev = metrics[i-1].metrics;
-    const curr = metrics[i].metrics;
-    const dt = metrics[i].timestamp - metrics[i-1].timestamp;
-    if (dt <= 0) { metrics[i].wristSpeed = 0; continue; }
-    const dx = curr.rWrist.x - prev.rWrist.x;
-    const dy = curr.rWrist.y - prev.rWrist.y;
-    metrics[i].wristSpeed = Math.sqrt(dx*dx + dy*dy) / dt;
-  }
-  
-  // Use timestamps for phase detection (not array index, since many frames may be invalid/skipped)
-  const startTime = metrics[0].timestamp;
-  const endTime = metrics[metrics.length - 1].timestamp;
-  const duration = endTime - startTime;
-  
-  console.log(`[Phase] Valid frames: ${metrics.length}, duration: ${duration.toFixed(3)}s, start: ${startTime.toFixed(3)}, end: ${endTime.toFixed(3)}`);
-  
-  // Helper: find closest valid frame to a timestamp
-  function closestFrame(targetTime) {
-    let best = 0, bestDiff = Infinity;
-    for (let i = 0; i < metrics.length; i++) {
-      const diff = Math.abs(metrics[i].timestamp - targetTime);
-      if (diff < bestDiff) { bestDiff = diff; best = i; }
+  // ===== STEP 1: Extract raw wrist data with validity check =====
+  const rawData = allPoseData.map((pd, i) => {
+    if (!pd.valid || !pd.landmarks) return { index: i, timestamp: pd.timestamp, valid: false };
+    const rWrist = pd.landmarks[16];
+    const lWrist = pd.landmarks[15];
+    const rShoulder = pd.landmarks[12];
+    const lShoulder = pd.landmarks[11];
+    const rHip = pd.landmarks[24];
+    const lHip = pd.landmarks[23];
+    if (rWrist.visibility < VISIBILITY_THRESHOLD && lWrist.visibility < VISIBILITY_THRESHOLD) {
+      return { index: i, timestamp: pd.timestamp, valid: false };
     }
-    return best;
+    return {
+      index: i, timestamp: pd.timestamp, valid: true,
+      wristX: (rWrist.x + lWrist.x) / 2,
+      wristY: (rWrist.y + lWrist.y) / 2,
+      shoulderY: (rShoulder.y + lShoulder.y) / 2,
+      hipY: (rHip.y + lHip.y) / 2,
+      landmarks: pd.landmarks
+    };
+  });
+  
+  const validCount = rawData.filter(d => d.valid).length;
+  console.log(`[PhaseDetect] Total: ${totalFrames}, Valid: ${validCount} (${(validCount/totalFrames*100).toFixed(0)}%)`);
+  if (validCount < 5) return null;
+  
+  // ===== STEP 2: Interpolation for missing frames =====
+  function findPrevValid(idx) { for (let i = idx-1; i >= 0; i--) { if (rawData[i].valid) return i; } return -1; }
+  function findNextValid(idx) { for (let i = idx+1; i < totalFrames; i++) { if (rawData[i].valid) return i; } return -1; }
+  
+  const interpolated = rawData.map((d, i) => {
+    if (d.valid) return { ...d };
+    const prev = findPrevValid(i);
+    const next = findNextValid(i);
+    if (prev === -1 || next === -1) return { ...d };
+    const t = (i - prev) / (next - prev);
+    return {
+      index: i, timestamp: d.timestamp, valid: true, interpolated: true,
+      wristX: rawData[prev].wristX + t * (rawData[next].wristX - rawData[prev].wristX),
+      wristY: rawData[prev].wristY + t * (rawData[next].wristY - rawData[prev].wristY),
+      shoulderY: rawData[prev].shoulderY + t * (rawData[next].shoulderY - rawData[prev].shoulderY),
+      hipY: rawData[prev].hipY + t * (rawData[next].hipY - rawData[prev].hipY),
+      landmarks: null
+    };
+  });
+  
+  console.log(`[PhaseDetect] After interpolation: ${interpolated.filter(d => d.valid).length} valid`);
+  
+  // ===== STEP 3: Smoothing (Moving Average) =====
+  function smooth(data, w) {
+    return data.map((_, i) => {
+      const s = Math.max(0, i - Math.floor(w/2));
+      const e = Math.min(data.length, i + Math.floor(w/2) + 1);
+      const sl = data.slice(s, e).filter(v => v !== null);
+      return sl.length > 0 ? sl.reduce((a, b) => a + b) / sl.length : null;
+    });
+  }
+  function fillNulls(arr) {
+    const f = [...arr];
+    for (let i = 1; i < f.length; i++) { if (f[i] === null) f[i] = f[i-1]; }
+    for (let i = f.length-2; i >= 0; i--) { if (f[i] === null) f[i] = f[i+1]; }
+    return f;
   }
   
-  // Helper: find frame with minimum wristY in time range
-  function minWristYInRange(tStart, tEnd) {
-    let best = -1, minY = Infinity;
-    for (let i = 0; i < metrics.length; i++) {
-      if (metrics[i].timestamp < tStart || metrics[i].timestamp > tEnd) continue;
-      if (metrics[i].metrics.avgWristY < minY) {
-        minY = metrics[i].metrics.avgWristY;
-        best = i;
-      }
+  const wristX = smooth(fillNulls(interpolated.map(d => d.valid ? d.wristX : null)), SMOOTH_WINDOW);
+  const wristY = smooth(fillNulls(interpolated.map(d => d.valid ? d.wristY : null)), SMOOTH_WINDOW);
+  
+  // ===== STEP 4: Compute velocity (screen coords: Y increases downward) =====
+  const velocityY = wristY.map((y, i) => {
+    if (i === 0 || y === null || wristY[i-1] === null) return 0;
+    const dt = interpolated[i].timestamp - interpolated[i-1].timestamp;
+    return dt > 0 ? (y - wristY[i-1]) / dt : 0;
+  });
+  const velYSmooth = smooth(velocityY, SMOOTH_WINDOW);
+  
+  // ===== STEP 5: P4 (Top) = minimum wristY in first 55% =====
+  const searchStart = Math.floor(totalFrames * 0.1);
+  const searchEnd = Math.floor(totalFrames * 0.55);
+  let p4Idx = searchStart, minY = Infinity;
+  for (let i = searchStart; i < searchEnd; i++) {
+    if (wristY[i] !== null && wristY[i] < minY) { minY = wristY[i]; p4Idx = i; }
+  }
+  
+  // ===== STEP 6: P6 (Impact) = min Y + velocity direction change AFTER P4 =====
+  const impactEnd = Math.min(p4Idx + Math.floor(totalFrames * 0.45), totalFrames - 2);
+  const candidates = [];
+  for (let i = p4Idx + 2; i < impactEnd; i++) {
+    if (wristY[i] === null) continue;
+    const localMinY = wristY[i] <= Math.min(...wristY.slice(Math.max(0,i-2), i+3).filter(v => v !== null));
+    const vBefore = velYSmooth[i-1] || 0;
+    const vAfter = velYSmooth[Math.min(i+1, totalFrames-1)] || 0;
+    // In screen coords: positive velY = wrist going down, negative = going up
+    // Impact: wrist was going down (pos), then starts going up (neg) = direction change
+    const dirChange = vBefore > 0.05 && vAfter < 0;
+    let score = 0;
+    if (localMinY) score += 3;
+    if (dirChange) score += 3;
+    if (score >= 3) candidates.push({ idx: i, score, y: wristY[i] });
+  }
+  
+  let p6Idx;
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => b.score - a.score || a.y - b.y);
+    p6Idx = candidates[0].idx;
+  } else {
+    // Fallback: minimum wristY after P4
+    let minYPost = Infinity;
+    p6Idx = p4Idx + Math.floor((totalFrames - p4Idx) * 0.3);
+    for (let i = p4Idx + 1; i < impactEnd; i++) {
+      if (wristY[i] !== null && wristY[i] < minYPost) { minYPost = wristY[i]; p6Idx = i; }
     }
-    return best;
   }
+  p6Idx = Math.max(p4Idx + 1, p6Idx);
   
-  // --- PHASE DETECTION RULES (timestamp-based) ---
-  // Golf swing timing: backswing ~65-70% of total, downswing+follow ~30-35%
-  
-  // P4 (Top of Backswing): highest wrist position in first 55% of duration
-  const p4SearchEnd = startTime + duration * 0.55;
-  const p4SearchStart = startTime + duration * 0.12;
-  let p4mIdx = minWristYInRange(p4SearchStart, p4SearchEnd);
-  if (p4mIdx < 0) p4mIdx = closestFrame(startTime + duration * 0.4); // fallback
-  const p4Time = metrics[p4mIdx].timestamp;
-  
-  console.log(`[Phase] P4 detected at metrics[${p4mIdx}], timestamp=${p4Time.toFixed(3)}, original frame=${metrics[p4mIdx].index}`);
-  
-  // P1 Setup: first frame
-  const p1mIdx = 0;
-  
-  // P2 Takeaway: find first frame where wrist moved significantly from P1
-  const p1WristPos = { x: (metrics[0].metrics.rWrist.x + metrics[0].metrics.lWrist.x) / 2, 
-                        y: metrics[0].metrics.avgWristY };
-  let p2mIdx = -1;
-  for (let i = 1; i < p4mIdx; i++) {
-    const wx = (metrics[i].metrics.rWrist.x + metrics[i].metrics.lWrist.x) / 2;
-    const wy = metrics[i].metrics.avgWristY;
-    const dist = Math.sqrt(Math.pow(wx - p1WristPos.x, 2) + Math.pow(wy - p1WristPos.y, 2));
-    if (dist > 0.04) { p2mIdx = i; break; }
+  // ===== STEP 7: P5 (Downswing) = max downward velocity between P4 and P6 =====
+  let p5Idx = Math.round((p4Idx + p6Idx) / 2);
+  let maxDownVel = -Infinity;
+  for (let i = p4Idx + 1; i < p6Idx; i++) {
+    if (velYSmooth[i] > maxDownVel) { maxDownVel = velYSmooth[i]; p5Idx = i; }
   }
-  if (p2mIdx < 0 || p2mIdx >= p4mIdx) {
-    // Fallback: ~35% between P1 and P4 by time
-    p2mIdx = closestFrame(startTime + (p4Time - startTime) * 0.35);
-  }
-  p2mIdx = Math.max(1, Math.min(p2mIdx, p4mIdx - 2));
+  p5Idx = Math.max(p4Idx + 1, Math.min(p5Idx, p6Idx - 1));
   
-  // P3 Backswing: ~70% between P1 and P4 by time
-  let p3mIdx = closestFrame(startTime + (p4Time - startTime) * 0.70);
-  p3mIdx = Math.max(p2mIdx + 1, Math.min(p3mIdx, p4mIdx - 1));
-  
-  // --- POST P4: timing-based using known golf swing ratios ---
-  // Downswing (P4→P6) is ~3x faster than backswing
-  // backswingDuration = p4Time - startTime
-  // downswingDuration ≈ backswingDuration / 3
-  const backswingDuration = p4Time - startTime;
-  const estimatedDownswing = backswingDuration / 3;
-  const estimatedImpactTime = p4Time + estimatedDownswing;
-  
-  // P6 Impact: use estimated time, but also try wrist-Y returning to hip level
-  let p6Time = estimatedImpactTime;
-  
-  // Verify with wrist position — impact = wrists back near address level
-  const addressWristY = metrics[0].metrics.avgWristY;
-  for (let i = p4mIdx + 1; i < metrics.length; i++) {
-    if (metrics[i].timestamp > p4Time + estimatedDownswing * 1.5) break; // don't search too far
-    if (metrics[i].metrics.avgWristY >= addressWristY - 0.05) {
-      p6Time = metrics[i].timestamp;
-      break;
+  // ===== STEP 8: P7 (Follow Through) = after impact, wrist going UP =====
+  let p7Idx = null;
+  for (let i = p6Idx + 1; i < totalFrames - 1; i++) {
+    // Wrist moving up (negative velocity in screen coords)
+    if (velYSmooth[i] < -0.01 && wristY[i] !== null && wristY[i] < (wristY[p6Idx] || 1) - 0.02) {
+      p7Idx = i; break;
     }
   }
-  // Clamp: impact should not be later than P4 + 40% of remaining time
-  p6Time = Math.min(p6Time, p4Time + (endTime - p4Time) * 0.4);
-  let p6mIdx = closestFrame(p6Time);
-  p6mIdx = Math.max(p4mIdx + 1, p6mIdx);
+  if (p7Idx === null) p7Idx = Math.min(p6Idx + Math.floor((totalFrames - p6Idx) * 0.4), totalFrames - 2);
   
-  // P5 Downswing: midpoint between P4 and P6 by time
-  let p5mIdx = closestFrame((p4Time + metrics[p6mIdx].timestamp) / 2);
-  p5mIdx = Math.max(p4mIdx + 1, Math.min(p5mIdx, p6mIdx - 1));
-  // If P5 == P4+1 == P6-1 all squeezed, ensure at least distinct
-  if (p5mIdx <= p4mIdx) p5mIdx = p4mIdx + 1;
-  if (p5mIdx >= p6mIdx && p6mIdx > p4mIdx + 2) p5mIdx = p6mIdx - 1;
+  // ===== STEP 9: P1, P2, P3, P8 =====
+  const p1Idx = 0;
+  let p2Idx = Math.max(1, Math.round(p4Idx * 0.3));
+  for (let i = 1; i < p4Idx; i++) {
+    if (wristX[i] === null || wristY[i] === null) continue;
+    const dist = Math.sqrt(Math.pow((wristX[i]||0) - (wristX[0]||0), 2) + Math.pow((wristY[i]||0) - (wristY[0]||0), 2));
+    if (dist > 0.03) { p2Idx = i; break; }
+  }
+  p2Idx = Math.max(1, Math.min(p2Idx, p4Idx - 2));
   
-  // P7 Follow Through: ~45% between P6 and end by time
-  const p6ActualTime = metrics[p6mIdx].timestamp;
-  let p7mIdx = closestFrame(p6ActualTime + (endTime - p6ActualTime) * 0.40);
-  p7mIdx = Math.max(p6mIdx + 1, Math.min(p7mIdx, metrics.length - 2));
+  let p3Idx = Math.round(p4Idx * 0.7);
+  p3Idx = Math.max(p2Idx + 1, Math.min(p3Idx, p4Idx - 1));
   
-  // P8 Finish: near end
-  let p8mIdx = Math.max(p7mIdx + 1, metrics.length - 2);
-  p8mIdx = Math.min(p8mIdx, metrics.length - 1);
+  let p8Idx = Math.min(Math.max(p7Idx + 2, totalFrames - 3), totalFrames - 1);
   
-  // Build final indices, ensure strictly increasing
-  let indices = [p1mIdx, p2mIdx, p3mIdx, p4mIdx, p5mIdx, p6mIdx, p7mIdx, p8mIdx];
+  // Ensure strictly increasing
+  const indices = [p1Idx, p2Idx, p3Idx, p4Idx, p5Idx, p6Idx, p7Idx, p8Idx];
   for (let i = 1; i < indices.length; i++) {
-    if (indices[i] <= indices[i-1]) {
-      indices[i] = Math.min(indices[i-1] + 1, metrics.length - 1);
-    }
+    if (indices[i] <= indices[i-1]) indices[i] = Math.min(indices[i-1] + 1, totalFrames - 1);
   }
   
   const phaseNames = [
-    { position: 'P1', name: 'Setup/Address' },
-    { position: 'P2', name: 'Takeaway' },
-    { position: 'P3', name: 'Backswing' },
-    { position: 'P4', name: 'Top of Backswing' },
-    { position: 'P5', name: 'Downswing' },
-    { position: 'P6', name: 'Impact' },
-    { position: 'P7', name: 'Follow Through' },
-    { position: 'P8', name: 'Finish' },
+    { position: 'P1', name: 'Setup/Address' }, { position: 'P2', name: 'Takeaway' },
+    { position: 'P3', name: 'Backswing' }, { position: 'P4', name: 'Top of Backswing' },
+    { position: 'P5', name: 'Downswing' }, { position: 'P6', name: 'Impact' },
+    { position: 'P7', name: 'Follow Through' }, { position: 'P8', name: 'Finish' },
   ];
   
-  console.log('[Phase Detection] Indices:', indices.map((idx, i) => 
-    `${phaseNames[i].position}=metrics[${idx}](origFrame${metrics[idx].index},t=${metrics[idx].timestamp.toFixed(3)})`
+  console.log('[PhaseDetect] ' + indices.map((idx, i) =>
+    `${phaseNames[i].position}=f${idx}(t=${interpolated[idx].timestamp.toFixed(3)},wY=${(wristY[idx]||0).toFixed(3)},vY=${(velYSmooth[idx]||0).toFixed(3)})`
   ).join(', '));
   
-  return phaseNames.map((p, i) => ({
-    position: p.position,
-    name: p.name,
-    frame_index: metrics[indices[i]].index,
-    timestamp: metrics[indices[i]].timestamp,
-    metrics: metrics[indices[i]].metrics,
-    landmarks: metrics[indices[i]].landmarks,
-    wristSpeed: metrics[indices[i]].wristSpeed
-  }));
+  return phaseNames.map((p, i) => {
+    const fi = indices[i];
+    const orig = allPoseData[fi];
+    return {
+      position: p.position, name: p.name, frame_index: fi,
+      timestamp: interpolated[fi].timestamp,
+      metrics: orig.valid ? extractPoseMetrics(orig.landmarks) : null,
+      landmarks: orig.valid ? orig.landmarks : null,
+      wristSpeed: Math.abs(velYSmooth[fi] || 0)
+    };
+  });
 }
+
 
 // ===== CLUB HEAD TRAJECTORY (Motion Delta) =====
 function detectClubHeadTrajectory(frames, poseData) {
@@ -2619,69 +2641,58 @@ async function startAnalysis() {
       setTimeout(resolve, 10000);
     });
 
-    // === ADAPTIVE FRAME EXTRACTION ===
-    // Phase 1: Extract 20 frames evenly for initial phase detection
-    const initialFrames = await extractFrames(vid, 20);
-    console.log('[Analysis] Phase 1: Extracted', initialFrames.length, 'initial frames');
+    // === FRAME EXTRACTION (50 frames for dense coverage) ===
+    const frames = await extractFrames(vid, 50);
+    console.log('[Analysis] Extracted', frames.length, 'frames');
 
-    // Step 3: Quick phase detection to find P4 (Top of Backswing)
+    // Step 3: MediaPipe Pose on ALL frames → velocity-based phase detection
     updateLoadingStep(3);
-    let initialPositions;
-    try {
-      initialPositions = await detectPositionsVisual(initialFrames);
-      console.log('[Analysis] Initial GPT-4o detection:', initialPositions.map(p => `${p.position}=frame${p.frame_index}`).join(', '));
-    } catch(e) {
-      console.warn('[Analysis] Initial detection failed:', e.message);
-      initialPositions = generateFallbackPositions(initialFrames.length);
-    }
-
-    // Find P4 timestamp — this is our anchor point
-    const p4Pos = initialPositions.find(p => p.position === 'P4');
-    const p4FrameIdx = p4Pos ? Math.min(p4Pos.frame_index, initialFrames.length - 1) : Math.round(initialFrames.length * 0.4);
-    const p4Timestamp = initialFrames[p4FrameIdx].timestamp;
-    const videoDuration = vid.duration;
-    
-    console.log(`[Analysis] P4 anchor: frame${p4FrameIdx}, timestamp=${p4Timestamp.toFixed(3)}s, videoDuration=${videoDuration.toFixed(3)}s`);
-
-    // Phase 2: Dense extraction after P4 (downswing → impact → follow through → finish)
-    const denseStart = Math.max(0, p4Timestamp - 0.1); // slightly before P4
-    const denseEnd = videoDuration;
-    const denseCount = 30; // 30 frames in the fast portion
-    const denseInterval = (denseEnd - denseStart) / (denseCount + 1);
-    
-    const denseFrames = [];
-    for (let i = 1; i <= denseCount; i++) {
-      const t = denseStart + denseInterval * i;
-      try {
-        const frame = await extractFrameAt(vid, t);
-        denseFrames.push(frame);
-      } catch(e) {}
-    }
-    console.log(`[Analysis] Phase 2: Extracted ${denseFrames.length} dense frames from ${denseStart.toFixed(3)}s to ${denseEnd.toFixed(3)}s`);
-
-    // Merge: initial frames (before P4) + dense frames (P4 onward)
-    const preP4Frames = initialFrames.filter(f => f.timestamp < denseStart);
-    const allFrames = [...preP4Frames, ...denseFrames].sort((a, b) => a.timestamp - b.timestamp);
-    
-    allFrames.forEach((f, i) => f._mergedIndex = i);
-    console.log(`[Analysis] Merged: ${allFrames.length} total frames (${preP4Frames.length} pre-P4 + ${denseFrames.length} dense)`);
-
-    // Step 3b: Re-run GPT-4o detection on merged frames for final P1-P8
     let positions;
+    let poseData = [];
+    let mediaPipeSuccess = false;
+    let clubTrajectory = [];
+
     try {
-      positions = await detectPositionsVisual(allFrames);
-      console.log('[Analysis] Final GPT-4o detection:', positions.map(p => `${p.position}=frame${p.frame_index}`).join(', '));
+      poseData = await runMediaPipePose(frames, (i, total) => {
+        pctEl.textContent = (30 + Math.round((i / total) * 40)) + '%';
+      });
+
+      const detectedPhases = detectPhasesFromPose(poseData);
+      if (detectedPhases && detectedPhases.length >= 8) {
+        positions = detectedPhases;
+        mediaPipeSuccess = true;
+        console.log('[Analysis] MediaPipe velocity-based detection successful');
+        
+        try {
+          clubTrajectory = detectClubHeadTrajectory(frames, poseData);
+          console.log('[Analysis] Club trajectory points:', clubTrajectory.length);
+        } catch(e) {
+          console.warn('[Analysis] Club trajectory failed:', e.message);
+        }
+      } else {
+        throw new Error('Insufficient pose data for velocity detection');
+      }
     } catch(e) {
-      console.warn('[Analysis] Final detection failed, using fallback:', e.message);
-      positions = generateFallbackPositions(allFrames.length);
+      console.warn('[Analysis] MediaPipe detection failed, falling back to GPT-4o:', e.message);
+      try {
+        positions = await detectPositionsVisual(frames);
+      } catch(e2) {
+        positions = generateFallbackPositions(frames.length);
+      }
     }
 
-    // Step 4: Select frames, then run MediaPipe on selected frames only
+    // Step 4: Select best frames & enrich with MediaPipe data
     updateLoadingStep(4);
-    const selectedPositions = positions.slice(0, 10);
-    const selectedFrames = selectedPositions.map(p => {
-      const idx = Math.min(p.frame_index, allFrames.length - 1);
-      return { ...allFrames[idx], right_wrist: null, right_elbow: null, landmarks: null };
+    const selectedPositions = (mediaPipeSuccess ? positions : positions.slice(0, 10));
+    const selectedFrames = selectedPositions.map((p, idx) => {
+      const fi = Math.min(p.frame_index, frames.length - 1);
+      const pd = poseData[fi];
+      return {
+        ...frames[fi],
+        right_wrist: (pd && pd.valid) ? { x: pd.landmarks[16].x, y: pd.landmarks[16].y } : null,
+        right_elbow: (pd && pd.valid) ? { x: pd.landmarks[14].x, y: pd.landmarks[14].y } : null,
+        landmarks: (pd && pd.valid) ? pd.landmarks : null
+      };
     });
 
     // Re-extract HQ frames
@@ -2692,75 +2703,21 @@ async function startAnalysis() {
       } catch(e) {}
     }
 
-    // Run MediaPipe Pose on selected frames only (8-10 frames, fast)
-    let mediaPipeSuccess = false;
-    let clubTrajectory = [];
-    try {
-      console.log('[Analysis] Running MediaPipe on', selectedFrames.length, 'selected frames...');
-      const pose = await initMediaPipePose();
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      
-      for (let i = 0; i < selectedFrames.length; i++) {
-        try {
-          const landmarks = await processFrameWithPose(pose, selectedFrames[i].base64, canvas, ctx);
-          if (landmarks) {
-            selectedFrames[i].right_wrist = { x: landmarks[16].x, y: landmarks[16].y };
-            selectedFrames[i].right_elbow = { x: landmarks[14].x, y: landmarks[14].y };
-            selectedFrames[i].landmarks = landmarks;
-            
-            // Extract pose metrics for this frame
-            const metrics = extractPoseMetrics(landmarks);
-            if (metrics) {
-              selectedPositions[i].metrics = {
-                wristRelHeight: metrics.wristRelHeight,
-                spineAngle: metrics.spineAngle,
-                shoulderTiltX: metrics.shoulderTiltX,
-                hipSpread: metrics.hipSpread,
-                lElbowAngle: metrics.lElbowAngle,
-                rElbowAngle: metrics.rElbowAngle,
-                handsOffsetX: metrics.handsOffsetX
-              };
-            }
-          }
-        } catch(e) {}
-        pctEl.textContent = (75 + Math.round((i / selectedFrames.length) * 15)) + '%';
-      }
-      
-      const validCount = selectedFrames.filter(f => f.landmarks !== null).length;
-      console.log('[Analysis] MediaPipe biomechanics:', validCount, '/', selectedFrames.length, 'frames with pose data');
-      mediaPipeSuccess = validCount >= 3;
-      
-      // Club head trajectory from all extracted frames
-      if (mediaPipeSuccess) {
-        try {
-          const allPoseData = [];
-          for (let i = 0; i < allFrames.length; i++) {
-            allPoseData.push({ frameIndex: i, timestamp: allFrames[i].timestamp, landmarks: null, valid: false });
-          }
-          selectedPositions.forEach((p, idx) => {
-            const fi = Math.min(p.frame_index, allFrames.length - 1);
-            if (selectedFrames[idx].landmarks) {
-              allPoseData[fi] = { frameIndex: fi, timestamp: allFrames[fi].timestamp, landmarks: selectedFrames[idx].landmarks, valid: true };
-            }
-          });
-          clubTrajectory = detectClubHeadTrajectory(allFrames, allPoseData);
-          console.log('[Analysis] Club trajectory points:', clubTrajectory.length);
-        } catch(e) {
-          console.warn('[Analysis] Club trajectory failed:', e.message);
-        }
-      }
-    } catch(e) {
-      console.warn('[Analysis] MediaPipe biomechanics failed:', e.message);
-    }
-
     // Prepare positions for API
     const positionsForApi = selectedPositions.map(p => ({
       position: p.position,
       name: p.name,
       frame_index: p.frame_index,
       wristSpeed: p.wristSpeed || null,
-      metrics: p.metrics || null
+      metrics: p.metrics ? {
+        wristRelHeight: p.metrics.wristRelHeight,
+        spineAngle: p.metrics.spineAngle,
+        shoulderTiltX: p.metrics.shoulderTiltX,
+        hipSpread: p.metrics.hipSpread,
+        lElbowAngle: p.metrics.lElbowAngle,
+        rElbowAngle: p.metrics.rElbowAngle,
+        handsOffsetX: p.metrics.handsOffsetX
+      } : null
     }));
 
     // Call analyze API
