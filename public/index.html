@@ -2498,7 +2498,45 @@ function detectClubHeadTrajectory(frames, poseData) {
 
 // ===== DETECT POSITIONS =====
 async function detectPositionsVisual(frames) {
-  const payload = { frames: frames.slice(0, 20).map(f => ({ base64: f.base64 })) };
+  // Sample evenly: pick 20 frames from available frames
+  const step = Math.max(1, Math.floor(frames.length / 20));
+  const sampled = [];
+  for (let i = 0; i < frames.length && sampled.length < 20; i += step) {
+    sampled.push({ base64: frames[i].base64, originalIndex: i });
+  }
+  
+  const imageContent = sampled.map((f, idx) => ([
+    { type: 'text', text: `Frame ${idx} (original #${f.originalIndex}):` },
+    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
+  ])).flat();
+
+  const systemPrompt = `You are a golf swing phase detector. Analyze the sequence of golf swing frames and identify which frame best represents each of the 8 swing positions.
+
+IMPORTANT visual cues for each position:
+- P1 Setup/Address: Golfer standing still, club behind ball, knees slightly bent
+- P2 Takeaway: Club has moved back ~30-45°, hands at hip level, weight shifting
+- P3 Backswing: Arms/club at roughly horizontal (~90°), hands at shoulder height
+- P4 Top of Backswing: Hands at highest point, club points backward/down, maximum shoulder turn
+- P5 Downswing: Club coming down, hands dropping from top, hips starting to rotate forward
+- P6 Impact: Club at/near the ball, arms extended down, body facing target slightly
+- P7 Follow Through: Club past the ball, arms extending forward/up, body rotating toward target
+- P8 Finish: Club wrapped around shoulders, body fully facing target, balanced pose
+
+Return ONLY a JSON array (no markdown, no explanation):
+[{"position":"P1","name":"Setup/Address","frame_index":<original_frame_number>},{"position":"P2","name":"Takeaway","frame_index":<n>},{"position":"P3","name":"Backswing","frame_index":<n>},{"position":"P4","name":"Top of Backswing","frame_index":<n>},{"position":"P5","name":"Downswing","frame_index":<n>},{"position":"P6","name":"Impact","frame_index":<n>},{"position":"P7","name":"Follow Through","frame_index":<n>},{"position":"P8","name":"Finish","frame_index":<n>}]`;
+
+  const payload = {
+    service: 'chat',
+    payload: {
+      model: 'gpt-4o',
+      max_tokens: 500,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: [...imageContent, { type: 'text', text: 'Identify the frame_index (use the original frame numbers shown) for each P1-P8 position. Return only the JSON array.' }] }
+      ]
+    }
+  };
+
   const res = await fetch(PROXY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2509,12 +2547,22 @@ async function detectPositionsVisual(frames) {
 
   let raw = data.choices[0].message.content;
   raw = raw.replace(/```json|```/g, '').trim();
+  console.log('[GPT-4o Detection] Raw:', raw.substring(0, 300));
+  
   const match = raw.match(/\[[\s\S]*\]/);
   if (match) {
-    const positions = JSON.parse(match[0]);
-    if (Array.isArray(positions) && positions.length >= 8) return positions.slice(0, 10);
+    try {
+      const positions = JSON.parse(match[0]);
+      if (Array.isArray(positions) && positions.length >= 8) {
+        console.log('[GPT-4o Detection] Positions:', positions.map(p => `${p.position}=frame${p.frame_index}`).join(', '));
+        return positions.slice(0, 10);
+      }
+    } catch(e) {
+      console.warn('[GPT-4o Detection] JSON parse failed:', e.message);
+    }
   }
   // Fallback positions
+  console.warn('[GPT-4o Detection] Falling back to timing-based positions');
   return generateFallbackPositions(frames.length);
 }
 
@@ -2563,65 +2611,25 @@ async function startAnalysis() {
       setTimeout(resolve, 10000);
     });
 
-    const frames = await extractFrames(vid, 50);
+    const frames = await extractFrames(vid, 30);
 
-    // Step 3: MediaPipe Pose Analysis
+    // Step 3: Phase Detection via GPT-4o (visual, more accurate)
     updateLoadingStep(3);
     let positions;
-    let poseData = [];
-    let clubTrajectory = [];
-    let mediaPipeSuccess = false;
-
     try {
-      poseData = await runMediaPipePose(frames, (i, total) => {
-        const poseProgress = 40 + Math.round((i / total) * 30);
-        pctEl.textContent = poseProgress + '%';
-      });
-
-      const detectedPhases = detectPhasesFromPose(poseData);
-      if (detectedPhases && detectedPhases.length >= 8) {
-        positions = detectedPhases;
-        mediaPipeSuccess = true;
-        console.log('[Analysis] MediaPipe phase detection successful');
-        
-        // Club head trajectory
-        try {
-          clubTrajectory = detectClubHeadTrajectory(frames, poseData);
-          console.log('[Analysis] Club trajectory points:', clubTrajectory.length);
-        } catch(e) {
-          console.warn('[Analysis] Club trajectory failed:', e);
-        }
-      } else {
-        throw new Error('Insufficient pose data');
-      }
+      positions = await detectPositionsVisual(frames);
+      console.log('[Analysis] GPT-4o phase detection successful, positions:', positions.length);
     } catch(e) {
-      console.warn('[Analysis] MediaPipe failed, falling back to GPT-4o detection:', e.message);
-      try {
-        positions = await detectPositionsVisual(frames);
-      } catch(e2) {
-        positions = generateFallbackPositions(frames.length);
-      }
+      console.warn('[Analysis] GPT-4o detection failed, using fallback:', e.message);
+      positions = generateFallbackPositions(frames.length);
     }
 
-    // Step 4: Select best frames & prepare for analysis
+    // Step 4: Select frames, then run MediaPipe on selected frames only (for biomechanics)
     updateLoadingStep(4);
-    const selectedFrames = (mediaPipeSuccess ? positions : positions.slice(0, 10)).map(p => {
+    const selectedPositions = positions.slice(0, 10);
+    const selectedFrames = selectedPositions.map(p => {
       const idx = Math.min(p.frame_index, frames.length - 1);
-      const poseFrame = poseData[idx];
-      
-      // Extract real keypoints if available
-      let rightWrist = null, rightElbow = null;
-      if (poseFrame && poseFrame.valid && poseFrame.landmarks) {
-        rightWrist = { x: poseFrame.landmarks[16].x, y: poseFrame.landmarks[16].y };
-        rightElbow = { x: poseFrame.landmarks[14].x, y: poseFrame.landmarks[14].y };
-      }
-      
-      return {
-        ...frames[idx],
-        right_wrist: rightWrist,
-        right_elbow: rightElbow,
-        landmarks: (poseFrame && poseFrame.valid) ? poseFrame.landmarks : null
-      };
+      return { ...frames[idx], right_wrist: null, right_elbow: null, landmarks: null };
     });
 
     // Re-extract HQ frames
@@ -2632,21 +2640,77 @@ async function startAnalysis() {
       } catch(e) {}
     }
 
-    // Prepare positions for API (with metrics if available)
-    const positionsForApi = (mediaPipeSuccess ? positions : positions.slice(0, 10)).map(p => ({
+    // Run MediaPipe Pose on selected frames only (8-10 frames, fast)
+    let mediaPipeSuccess = false;
+    let clubTrajectory = [];
+    try {
+      console.log('[Analysis] Running MediaPipe on', selectedFrames.length, 'selected frames...');
+      const pose = await initMediaPipePose();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      for (let i = 0; i < selectedFrames.length; i++) {
+        try {
+          const landmarks = await processFrameWithPose(pose, selectedFrames[i].base64, canvas, ctx);
+          if (landmarks) {
+            selectedFrames[i].right_wrist = { x: landmarks[16].x, y: landmarks[16].y };
+            selectedFrames[i].right_elbow = { x: landmarks[14].x, y: landmarks[14].y };
+            selectedFrames[i].landmarks = landmarks;
+            
+            // Extract pose metrics for this frame
+            const metrics = extractPoseMetrics(landmarks);
+            if (metrics) {
+              selectedPositions[i].metrics = {
+                wristRelHeight: metrics.wristRelHeight,
+                spineAngle: metrics.spineAngle,
+                shoulderTiltX: metrics.shoulderTiltX,
+                hipSpread: metrics.hipSpread,
+                lElbowAngle: metrics.lElbowAngle,
+                rElbowAngle: metrics.rElbowAngle,
+                handsOffsetX: metrics.handsOffsetX
+              };
+            }
+          }
+        } catch(e) {}
+        pctEl.textContent = (75 + Math.round((i / selectedFrames.length) * 15)) + '%';
+      }
+      
+      const validCount = selectedFrames.filter(f => f.landmarks !== null).length;
+      console.log('[Analysis] MediaPipe biomechanics:', validCount, '/', selectedFrames.length, 'frames with pose data');
+      mediaPipeSuccess = validCount >= 3;
+      
+      // Club head trajectory from all extracted frames (optional, quick run on subset)
+      if (mediaPipeSuccess) {
+        try {
+          // Run pose on a few more frames around impact for trajectory
+          const allPoseData = [];
+          for (let i = 0; i < frames.length; i++) {
+            allPoseData.push({ frameIndex: i, timestamp: frames[i].timestamp, landmarks: null, valid: false });
+          }
+          // Fill in data from selected frames
+          selectedPositions.forEach((p, idx) => {
+            const fi = Math.min(p.frame_index, frames.length - 1);
+            if (selectedFrames[idx].landmarks) {
+              allPoseData[fi] = { frameIndex: fi, timestamp: frames[fi].timestamp, landmarks: selectedFrames[idx].landmarks, valid: true };
+            }
+          });
+          clubTrajectory = detectClubHeadTrajectory(frames, allPoseData);
+          console.log('[Analysis] Club trajectory points:', clubTrajectory.length);
+        } catch(e) {
+          console.warn('[Analysis] Club trajectory failed:', e.message);
+        }
+      }
+    } catch(e) {
+      console.warn('[Analysis] MediaPipe biomechanics failed:', e.message);
+    }
+
+    // Prepare positions for API
+    const positionsForApi = selectedPositions.map(p => ({
       position: p.position,
       name: p.name,
       frame_index: p.frame_index,
       wristSpeed: p.wristSpeed || null,
-      metrics: p.metrics ? {
-        wristRelHeight: p.metrics.wristRelHeight,
-        spineAngle: p.metrics.spineAngle,
-        shoulderTiltX: p.metrics.shoulderTiltX,
-        hipSpread: p.metrics.hipSpread,
-        lElbowAngle: p.metrics.lElbowAngle,
-        rElbowAngle: p.metrics.rElbowAngle,
-        handsOffsetX: p.metrics.handsOffsetX
-      } : null
+      metrics: p.metrics || null
     }));
 
     // Call analyze API
