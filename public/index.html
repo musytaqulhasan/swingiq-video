@@ -896,13 +896,26 @@ body {
   padding: 7px 12px;
   background: #1a1a1a;
 }
-.vc-sound-label {
-  font-size: 11px;
-  color: #9ca3af;
-  white-space: nowrap;
-  min-width: 52px;
+.vc-sound-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  color: #e5e7eb;
+  flex-shrink: 0;
 }
-.vc-sound-label span { color: #e5e7eb; font-weight: 600; }
+.vc-sound-btn svg { width: 18px; height: 18px; display: block; }
+.vc-sound-btn:active { opacity: 0.7; }
+.vc-vol-pct {
+  font-size: 11px;
+  color: #e5e7eb;
+  font-weight: 600;
+  min-width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
 .vc-slider {
   flex: 1;
   -webkit-appearance: none;
@@ -1408,7 +1421,9 @@ body {
 
     <!-- Video — muted by default, 50% speed, float buttons inside -->
     <div class="result-video">
-      <video id="resultVideo" playsinline webkit-playsinline muted></video>
+      <video id="resultVideo" playsinline webkit-playsinline muted
+        onclick="this.paused ? this.play() : this.pause()"
+        style="cursor:pointer"></video>
       <canvas id="overlayCanvas"></canvas>
       <!-- Floating analysis buttons top-right -->
       <div class="video-float-btns">
@@ -1419,7 +1434,22 @@ body {
 
     <!-- Video Controls: volume slider + speed -->
     <div class="video-controls">
-      <div class="vc-sound-label">🔊 <span id="volPct">20%</span></div>
+      <button class="vc-sound-btn" id="soundBtn" onclick="toggleMuteBtn()" title="Mute/Unmute">
+        <!-- Speaker icon — SVG so it looks consistent on all devices -->
+        <svg id="iconSoundOn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+        <svg id="iconSoundOff" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          style="display:none">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+        </svg>
+      </button>
+      <span class="vc-vol-pct" id="volPct">20%</span>
       <input type="range" class="vc-slider" id="volSlider" min="0" max="100" value="20"
         oninput="setVolume(this.value)">
       <div class="vc-speed-group">
@@ -1599,21 +1629,44 @@ function seekVideoToPhase(ratio, posId) {
   document.querySelectorAll('.phase-card').forEach(c => c.classList.remove('active-phase'));
   const card = document.getElementById('phaseCard_' + posId);
   if (card) card.classList.add('active-phase');
+  // Pause at the frame so user can inspect — they can tap video or speed to resume
   vid.pause();
 }
 
 // ===== VIDEO CONTROLS =====
+function _syncSoundIcons(muted) {
+  document.getElementById('iconSoundOn').style.display  = muted ? 'none'  : 'block';
+  document.getElementById('iconSoundOff').style.display = muted ? 'block' : 'none';
+}
+
 function setVolume(val) {
   const vid = document.getElementById('resultVideo');
   const pct = document.getElementById('volPct');
-  const icon = document.querySelector('.vc-sound-label');
   const v = parseInt(val);
-  if (vid) {
-    vid.volume = v / 100;
-    vid.muted = (v === 0);
-  }
+  if (vid) { vid.volume = v / 100; vid.muted = (v === 0); }
   if (pct) pct.textContent = v + '%';
-  if (icon) icon.childNodes[0].textContent = v === 0 ? '🔇 ' : '🔊 ';
+  _syncSoundIcons(v === 0);
+}
+
+function toggleMuteBtn() {
+  const vid = document.getElementById('resultVideo');
+  const slider = document.getElementById('volSlider');
+  const pct = document.getElementById('volPct');
+  if (!vid) return;
+  if (vid.muted || vid.volume === 0) {
+    // Unmute — restore to 20% if was at 0
+    const restore = (slider && parseInt(slider.value) === 0) ? 20 : parseInt(slider?.value || 20);
+    vid.muted = false;
+    vid.volume = restore / 100;
+    if (slider) slider.value = restore;
+    if (pct) pct.textContent = restore + '%';
+    _syncSoundIcons(false);
+  } else {
+    vid.muted = true;
+    if (slider) slider.value = 0;
+    if (pct) pct.textContent = '0%';
+    _syncSoundIcons(true);
+  }
 }
 
 function setSpeed(rate) {
@@ -1625,6 +1678,8 @@ function setSpeed(rate) {
   document.querySelectorAll('.vc-speed').forEach(b => {
     if (b.textContent.trim() === (labels[rate] || '')) b.classList.add('active');
   });
+  // Resume play — start from current position (which may have been set by seekVideoToPhase)
+  if (vid.paused) vid.play().catch(() => {});
 }
 
 // ===== POSTURE ANGLES PANEL =====
@@ -2131,6 +2186,7 @@ function renderResults(data) {
   const pctEl = document.getElementById('volPct');
   if (slider) slider.value = 20;
   if (pctEl) pctEl.textContent = '20%';
+  _syncSoundIcons(true); // starts muted
 
   // P1-P8 Phases Grid
   renderPhasesGrid(data.phases);
