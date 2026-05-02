@@ -2555,85 +2555,101 @@ async function autoTrimSwing(frames) {
 
 function detectSwingPhases(trimmedFrames, poseData) {
   const N = trimmedFrames.length;
-  
-  // === TIMING-BASED PHASE MAPPING (baseline) ===
-  // P1:0-10%, P2:10-25%, P3:25-45%, P4:45-60%, P5:60-70%, P6:70-80%, P7:80-90%, P8:90-100%
-  const phaseRatios = [0.05, 0.15, 0.35, 0.50, 0.62, 0.72, 0.85, 0.95];
   const phaseNames = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
-  
-  // Initial frame indices from timing
-  let indices = phaseRatios.map(r => Math.round(r * (N-1)));
-  
-  console.log(`[Phases] Timing-based: ${indices.map((fi,i)=>`P${i+1}=f${fi}(t=${trimmedFrames[fi].timestamp.toFixed(2)})`).join(', ')}`);
-  
-  // === SIGNAL CORRECTION using MediaPipe data ===
-  if (poseData) {
-    const { wY, vYs, interp } = poseData;
-    
-    if (wY && wY.length === N) {
-      // CORRECTION 1: P4 = minimum wristY (highest hands) in 30-60% range
-      const p4Start = Math.floor(N*0.30), p4End = Math.floor(N*0.65);
-      let bestP4 = indices[3], minWY = Infinity;
-      for (let i=p4Start; i<=p4End; i++) {
-        if (wY[i]!==null && wY[i]<minWY) { minWY=wY[i]; bestP4=i; }
-      }
-      if (bestP4 !== indices[3]) {
-        console.log(`[Phases] P4 corrected: f${indices[3]}→f${bestP4} (wY=${minWY.toFixed(3)})`);
-        indices[3] = bestP4;
-      }
-      
-      // CORRECTION 2: P6 = FIRST velocity direction change within 0.5s after P4
-      const p4Time = trimmedFrames[indices[3]].timestamp;
-      const maxImpactTime = p4Time + 0.5;
-      let bestP6 = -1;
-      
-      // First try: velocity direction change (positive→negative in screen coords)
-      for (let i=indices[3]+1; i<N-1; i++) {
-        if (trimmedFrames[i].timestamp > maxImpactTime) break;
-        const vBef = vYs[Math.max(0,i-1)] || 0;
-        const vAft = vYs[Math.min(i+1,N-1)] || 0;
-        if (vBef > 0.01 && vAft < 0.01) {
-          bestP6 = i;
-          console.log(`[Phases] P6 corrected by velocity change: f${i}(t=${trimmedFrames[i].timestamp.toFixed(3)})`);
-          break;
-        }
-      }
-      
-      // Second try: max wristY (lowest hands) in window
-      if (bestP6 < 0) {
-        let maxWY = -Infinity;
-        for (let i=indices[3]+1; i<N; i++) {
-          if (trimmedFrames[i].timestamp > maxImpactTime) break;
-          if (wY[i]!==null && wY[i]>maxWY) { maxWY=wY[i]; bestP6=i; }
-        }
-        if (bestP6>=0) console.log(`[Phases] P6 corrected by max wY: f${bestP6}(wY=${maxWY.toFixed(3)})`);
-      }
-      
-      if (bestP6 >= 0 && bestP6 !== indices[5]) {
-        indices[5] = bestP6;
-        // P5 = midpoint between P4 and P6
-        indices[4] = Math.round((indices[3] + indices[5]) / 2);
-        // P7 = first upward motion after P6, max 0.5s
-        const p6Time = trimmedFrames[indices[5]].timestamp;
-        let bestP7 = -1;
-        for (let i=indices[5]+1; i<N-1; i++) {
-          if (trimmedFrames[i].timestamp > p6Time + 0.5) break;
-          if ((vYs[i]||0) < -0.02) { bestP7=i; break; }
-        }
-        if (bestP7>=0) indices[6] = bestP7;
-        else indices[6] = Math.min(indices[5]+Math.max(2,Math.round(N*0.1)), N-2);
+
+  // === TIMING-BASED BASELINE ===
+  // P1:5%, P2:15%, P3:35%, P4:50%, P5:62%, P6:72%, P7:85%, P8:95%
+  const baseRatios = [0.05, 0.15, 0.35, 0.50, 0.62, 0.72, 0.85, 0.95];
+  let idx = baseRatios.map(r => Math.min(Math.round(r * (N-1)), N-1));
+
+  console.log(`[Phases] Timing baseline: ${idx.map((fi,i)=>`P${i+1}=f${fi}(t=${trimmedFrames[fi].timestamp.toFixed(2)})`).join(', ')}`);
+
+  // === SIGNAL CORRECTION (if MediaPipe data available) ===
+  if (poseData && poseData.wY && poseData.wY.length === N) {
+    const { wY, vYs } = poseData;
+
+    // CORRECT P4: minimum wristY (highest hands) in 30-60% range
+    const p4S = Math.floor(N * 0.30), p4E = Math.floor(N * 0.60);
+    let bestP4 = idx[3], minWY = Infinity;
+    for (let i = p4S; i <= p4E; i++) {
+      if (wY[i] !== null && wY[i] < minWY) { minWY = wY[i]; bestP4 = i; }
+    }
+    if (bestP4 !== idx[3]) {
+      console.log(`[Phases] P4 corrected: f${idx[3]}→f${bestP4} (wY=${minWY.toFixed(3)})`);
+      idx[3] = bestP4;
+    }
+
+    // CORRECT P6: FIRST velocity direction change within 0.4s after P4
+    const p4Time = trimmedFrames[idx[3]].timestamp;
+    const maxImpactTime = p4Time + 0.4;
+
+    // Find last frame within window
+    let windowEnd = idx[3] + 1;
+    for (let i = idx[3] + 1; i < N; i++) {
+      if (trimmedFrames[i].timestamp > maxImpactTime) break;
+      windowEnd = i;
+    }
+
+    console.log(`[Phases] Impact window: f${idx[3]+1}(t=${trimmedFrames[idx[3]+1]?.timestamp.toFixed(2)})→f${windowEnd}(t=${trimmedFrames[windowEnd]?.timestamp.toFixed(2)}) [0.4s max]`);
+
+    let bestP6 = -1;
+
+    // Try 1: velocity direction change (positive→negative = down→up)
+    for (let i = idx[3] + 1; i <= windowEnd; i++) {
+      const vBef = vYs[Math.max(0, i-1)] || 0;
+      const vAft = vYs[Math.min(i+1, N-1)] || 0;
+      if (vBef > 0.01 && vAft < 0.01) {
+        bestP6 = i;
+        console.log(`[Phases] P6 by velocity change: f${i}(t=${trimmedFrames[i].timestamp.toFixed(3)})`);
+        break;
       }
     }
+
+    // Try 2: max wristY (lowest hands) in window
+    if (bestP6 < 0) {
+      let maxWY = -Infinity;
+      for (let i = idx[3] + 1; i <= windowEnd; i++) {
+        if (wY[i] !== null && wY[i] > maxWY) { maxWY = wY[i]; bestP6 = i; }
+      }
+      if (bestP6 >= 0) console.log(`[Phases] P6 by max wY: f${bestP6}(wY=${maxWY.toFixed(3)})`);
+    }
+
+    // Try 3: last frame in window
+    if (bestP6 < 0) {
+      bestP6 = windowEnd;
+      console.log(`[Phases] P6 fallback: end of window f${bestP6}`);
+    }
+
+    // Apply P6
+    idx[5] = Math.max(idx[3] + 2, bestP6);
+
+    // P5 = 2-3 frames before P6 (or midpoint P4-P6 if gap is big enough)
+    const gapP4P6 = idx[5] - idx[3];
+    if (gapP4P6 >= 4) {
+      idx[4] = Math.round(idx[3] + gapP4P6 * 0.5);
+    } else {
+      idx[4] = Math.max(idx[3] + 1, idx[5] - 2);
+    }
+
+    // P7 = ~0.2s after P6
+    const p6Time = trimmedFrames[idx[5]].timestamp;
+    const targetP7Time = p6Time + 0.2;
+    let bestP7 = idx[5] + 3;
+    for (let i = idx[5] + 1; i < N; i++) {
+      if (trimmedFrames[i].timestamp >= targetP7Time) { bestP7 = i; break; }
+      if (i === N - 1) bestP7 = i;
+    }
+    idx[6] = Math.min(bestP7, N - 2);
   }
-  
+
   // Ensure strictly increasing
-  for (let i=1; i<indices.length; i++) {
-    if (indices[i]<=indices[i-1]) indices[i]=Math.min(indices[i-1]+1, N-1);
+  for (let i = 1; i < idx.length; i++) {
+    if (idx[i] <= idx[i-1]) idx[i] = Math.min(idx[i-1] + 1, N - 1);
   }
-  
-  console.log(`[Phases] FINAL: ${indices.map((fi,i)=>`P${i+1}=f${fi}(t=${trimmedFrames[fi].timestamp.toFixed(2)})`).join(', ')}`);
-  
-  return indices.map((fi,i) => ({
+
+  console.log(`[Phases] FINAL: ${idx.map((fi,i)=>`P${i+1}=f${fi}(t=${trimmedFrames[fi].timestamp.toFixed(2)})`).join(', ')}`);
+
+  return idx.map((fi, i) => ({
     position: `P${i+1}`,
     name: phaseNames[i],
     frame_index: fi,
