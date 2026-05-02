@@ -2556,71 +2556,15 @@ async function autoTrimSwing(frames) {
 function detectSwingPhases(trimmedFrames, poseData) {
   const N = trimmedFrames.length;
   const phaseNames = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
-  const baseRatios = [0.05, 0.15, 0.35, 0.50, 0.62, 0.72, 0.85, 0.95];
-  let idx = baseRatios.map(r => Math.min(Math.round(r * (N-1)), N-1));
+  const ratios = [0.05, 0.20, 0.35, 0.55, 0.62, 0.68, 0.80, 0.92];
+  const idx = ratios.map(r => Math.min(Math.round(r * (N-1)), N-1));
 
-  console.log(`[Phases] Baseline: ${idx.map((fi,i)=>`P${i+1}=f${fi}`).join(', ')}`);
-
-  if (poseData && poseData.wY && poseData.wY.length === N) {
-    const { wY } = poseData;
-
-    // P4: min wristY in 30-60%
-    const p4S = Math.floor(N*0.30), p4E = Math.floor(N*0.60);
-    let bestP4 = idx[3], minWY = Infinity;
-    for (let i = p4S; i <= p4E; i++) {
-      if (wY[i] !== null && wY[i] < minWY) { minWY = wY[i]; bestP4 = i; }
-    }
-    idx[3] = bestP4;
-    console.log(`[Phases] P4=f${idx[3]}(wY=${minWY.toFixed(3)})`);
-
-    // P6: MAX ABSOLUTE VELOCITY within 0.3s after P4
-    const p4Time = trimmedFrames[idx[3]].timestamp;
-    const maxTime = p4Time + 0.3;
-    let windowEnd = idx[3];
-    for (let i = idx[3]+1; i < N; i++) {
-      if (trimmedFrames[i].timestamp > maxTime) break;
-      windowEnd = i;
-    }
-    console.log(`[Phases] Impact window: f${idx[3]+1}→f${windowEnd} (0.3s)`);
-
-    // Compute absolute velocity per frame
-    let bestP6 = -1, maxVel = 0;
-    const vels = [];
-    for (let i = idx[3]+1; i <= windowEnd; i++) {
-      if (wY[i] === null || wY[i-1] === null) { vels.push(0); continue; }
-      const v = Math.abs(wY[i] - wY[i-1]);
-      vels.push(v);
-      if (v > maxVel) { maxVel = v; bestP6 = i; }
-    }
-    console.log(`[Phases] Velocities in window: ${vels.map(v=>v.toFixed(4)).join(', ')}`);
-
-    if (bestP6 >= 0) {
-      console.log(`[Phases] P6 by max velocity: f${bestP6}(vel=${maxVel.toFixed(4)})`);
-    } else {
-      bestP6 = Math.min(idx[3] + Math.max(2, Math.round((windowEnd-idx[3])*0.7)), windowEnd);
-      console.log(`[Phases] P6 fallback: f${bestP6}`);
-    }
-
-    idx[5] = Math.max(idx[3]+2, bestP6);
-
-    // P5: 2-3 frames before P6
-    const gap = idx[5] - idx[3];
-    idx[4] = gap >= 4 ? Math.round(idx[3] + gap * 0.4) : Math.max(idx[3]+1, idx[5]-2);
-
-    // P7: ~0.15s after P6
-    const p6Time = trimmedFrames[idx[5]].timestamp;
-    let bestP7 = Math.min(idx[5]+3, N-2);
-    for (let i = idx[5]+1; i < N; i++) {
-      if (trimmedFrames[i].timestamp >= p6Time + 0.15) { bestP7 = i; break; }
-    }
-    idx[6] = Math.min(bestP7, N-2);
-  }
-
+  // Ensure strictly increasing
   for (let i=1; i<idx.length; i++) {
     if (idx[i]<=idx[i-1]) idx[i]=Math.min(idx[i-1]+1, N-1);
   }
 
-  console.log(`[Phases] FINAL: ${idx.map((fi,i)=>`P${i+1}=f${fi}(t=${trimmedFrames[fi].timestamp.toFixed(2)})`).join(', ')}`);
+  console.log(`[Phases] Time-normalized: ${idx.map((fi,i)=>`P${i+1}=f${fi}(t=${trimmedFrames[fi].timestamp.toFixed(2)})`).join(', ')}`);
 
   return idx.map((fi,i) => ({
     position:`P${i+1}`, name:phaseNames[i], frame_index:fi,
