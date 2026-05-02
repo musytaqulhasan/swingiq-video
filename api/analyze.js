@@ -71,8 +71,8 @@ export default async function handler(req, res) {
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
   if (!OPENAI_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
 
-  const { frames, positions, viewAngle } = req.body;
-  console.log('frames:', frames?.length, 'viewAngle:', viewAngle);
+  const { frames, positions, viewAngle, club, mediaPipeDetected, clubTrajectory } = req.body;
+  console.log('frames:', frames?.length, 'viewAngle:', viewAngle, 'mediaPipe:', !!mediaPipeDetected, 'clubTrajectory:', !!clubTrajectory);
   if (!frames?.length) return res.status(400).json({ error: 'No frames provided' });
 
   try {
@@ -138,8 +138,27 @@ IMPORTANT — overlay_data: Estimate the position of body landmarks as ratios (0
 Return ONLY a valid JSON object. No markdown, no explanation, just raw JSON:
 {"overall_score":<0-100>,"view_angle":"<view>","coach_insight":"<2-3 kalimat coaching dalam Bahasa Indonesia>","focus_fault":"<fault utama max 5 kata>","focus_sub":"<1 kalimat dampak ke bola dalam Bahasa Indonesia>","coach_says":"<2-3 kalimat natural dalam Bahasa Indonesia>","why":"<1-2 kalimat penjelasan dalam Bahasa Indonesia>","fix_drill":"<nama drill>","fix_feel":"<1 kalimat feel cue Bahasa Indonesia>","strengths":["<s1>","<s2>","<s3>"],"improvements":["<hasil nyata 1>","<hasil nyata 2>","<hasil nyata 3>"],"phases":[{"position":"P1","name":"Setup/Address","score":<0-100>,"status":"<good|warn|bad>","feedback":"<Bahasa Indonesia>"},{"position":"P2","name":"Takeaway","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P3","name":"Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P4","name":"Top of Backswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P5","name":"Downswing","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P6","name":"Impact","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P7","name":"Follow Through","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"},{"position":"P8","name":"Finish","score":<0-100>,"status":"<good|warn|bad>","feedback":"<feedback>"}],"angle_analysis":[{"phase":"<P1-P8>","metric":"Spine Angle","value":"<N>°","ideal":"30–45°","status":"<good|warn|bad>","detail":"<Bahasa Indonesia>"},{"phase":"<P1-P8>","metric":"Shoulder Tilt","value":"<N>°","ideal":"35–50°","status":"<good|warn|bad>","detail":"<Bahasa Indonesia>"},{"phase":"<P1-P8>","metric":"Hip Rotation","value":"<N>°","ideal":"40–55°","status":"<good|warn|bad>","detail":"<Bahasa Indonesia>"}],"error_frames":[{"position":"<Px>","issue":"<fault>","actual_value":"<actual>","ideal_value":"<ideal>","status":"<bad|warn>","description":"<Bahasa Indonesia>"}],${overlaySchema}}`;
 
+    // Build biomechanics context from MediaPipe data
+    let bioCtx = `P4=frame${p4}, P6=frame${p6 ?? 'n/a'}, P7=frame${p7}`;
+    if (tempoData) bioCtx += `, Tempo=${tempoData.ratio} (${tempoData.classification})`;
+    
+    if (mediaPipeDetected && positions) {
+      const posMetrics = positions.filter(p => p.metrics).map(p => {
+        const m = p.metrics;
+        return `${p.position}: wristHeight=${m.wristRelHeight?.toFixed(2)}, spineAngle=${m.spineAngle?.toFixed(1)}°, elbowR=${m.rElbowAngle?.toFixed(1)}°, hipSpread=${m.hipSpread?.toFixed(3)}`;
+      }).join('\n');
+      if (posMetrics) bioCtx += `\n\nMediaPipe Pose Metrics (per phase):\n${posMetrics}`;
+    }
+    
+    if (clubTrajectory && clubTrajectory.length > 0) {
+      const maxClubSpeed = Math.max(...clubTrajectory.map(t => t.speed));
+      const impactIdx = clubTrajectory.findIndex(t => t.speed === maxClubSpeed);
+      bioCtx += `\n\nClub Head: max_speed_frame=${impactIdx}, trajectory_points=${clubTrajectory.length}`;
+    }
+
     const userPrompt = `View: ${viewLabel}
-Biomechanics: P4=frame${p4}, P6=frame${p6 ?? 'n/a'}, P7=frame${p7}${tempoData ? `, Tempo=${tempoData.ratio} (${tempoData.classification})` : ''}
+Detection: ${mediaPipeDetected ? 'MediaPipe Pose (33 keypoints)' : 'Visual estimation'}
+Biomechanics: ${bioCtx}
 Analyze all 8 positions and return the JSON. Remember to include Spine Angle, Shoulder Tilt, and Hip Rotation in angle_analysis, and estimate overlay_data landmark positions from the P1 frame.`;
 
     const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -176,7 +195,22 @@ Analyze all 8 positions and return the JSON. Remember to include Spine Angle, Sh
     try {
       result = JSON.parse(raw.substring(start, end + 1));
     } catch(e) {
-      return res.status(500).json({ error: 'JSON parse error: ' + e.message, debug: raw.substring(0, 300) });
+      // Sanitize common GPT-4o JSON issues
+      try {
+        let sanitized = raw.substring(start, end + 1);
+        // Fix trailing commas before } or ]
+        sanitized = sanitized.replace(/,\s*([}\]])/g, '$1');
+        // Fix single quotes to double quotes (careful with apostrophes in values)
+        sanitized = sanitized.replace(/(?<=[:,\[{])\s*'/g, ' "').replace(/'\s*(?=[,\]}\:])/g, '"');
+        // Fix unquoted property names
+        sanitized = sanitized.replace(/(\{|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+        // Remove control characters
+        sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, (c) => c === '\n' || c === '\t' ? c : '');
+        result = JSON.parse(sanitized);
+        console.log('JSON sanitization succeeded');
+      } catch(e2) {
+        return res.status(500).json({ error: 'JSON parse error: ' + e.message, debug: raw.substring(0, 300) });
+      }
     }
 
     // ── Safety fallbacks ─────────────────────────────────────────────────────
@@ -228,7 +262,7 @@ Analyze all 8 positions and return the JSON. Remember to include Spine Angle, Sh
         : { body_left_x: 0.22, body_right_x: 0.78, head_cx: 0.50, head_cy: 0.13, head_r: 0.09 };
     }
 
-    return res.status(200).json({ result, debug: { p4, p6, p7, p7_speed, p7_shaft, tempo: tempoData } });
+    return res.status(200).json({ result, debug: { p4, p6, p7, p7_speed, p7_shaft, tempo: tempoData, mediaPipeDetected: !!mediaPipeDetected, clubTrajectoryPoints: clubTrajectory?.length || 0 } });
 
   } catch (err) {
     console.error('analyze error:', err.message);
