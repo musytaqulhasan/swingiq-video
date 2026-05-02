@@ -2461,17 +2461,18 @@ function generateFallbackPositions(frameCount) {
 // ===== HYBRID SWING DETECTION SYSTEM =====
 
 async function autoTrimSwing(frames) {
-  // === PIXEL MOTION ===
+  const N = frames.length;
   const W=160, H=90;
   const c1=document.createElement('canvas'), c2=document.createElement('canvas');
   c1.width=W;c1.height=H;c2.width=W;c2.height=H;
   const x1=c1.getContext('2d',{willReadFrequently:true}), x2=c2.getContext('2d',{willReadFrequently:true});
-  
+
   function loadImg(b64,ctx,cvs){return new Promise(r=>{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0,cvs.width,cvs.height);r();};img.onerror=()=>r();img.src='data:image/jpeg;base64,'+b64;});}
-  
+
+  // Compute pixel motion
   const motion=[0];
   await loadImg(frames[0].base64,x1,c1);
-  for(let i=1;i<frames.length;i++){
+  for(let i=1;i<N;i++){
     await loadImg(frames[i].base64,x2,c2);
     try{
       const d1=x1.getImageData(0,0,W,H).data, d2=x2.getImageData(0,0,W,H).data;
@@ -2481,44 +2482,76 @@ async function autoTrimSwing(frames) {
     }catch(e){motion.push(0);}
     x1.drawImage(c2,0,0);
   }
-  
+
   // Smooth (window 5)
-  function sm5(a){return a.map((_,i)=>{let s=0,n=0;for(let j=i-2;j<=i+2;j++)if(j>=0&&j<a.length){s+=a[j];n++;}return n>0?s/n:0;});}
-  const smoothed = sm5(motion);
-  
-  // Normalize: subtract mean
-  const mean = smoothed.reduce((a,b)=>a+b,0)/smoothed.length;
-  const normalized = smoothed.map(v=>v-mean);
-  
-  // Find peak
-  const peak = Math.max(...normalized);
-  const peakIdx = normalized.indexOf(peak);
-  const threshold = peak * 0.5;
-  
-  // Expand from peak
-  let startFrame = peakIdx;
-  for(let i=peakIdx;i>=0;i--){if(normalized[i]<threshold){startFrame=i+1;break;}if(i===0)startFrame=0;}
-  let endFrame = peakIdx;
-  for(let i=peakIdx;i<normalized.length;i++){if(normalized[i]<threshold){endFrame=i-1;break;}if(i===normalized.length-1)endFrame=i;}
-  
-  // Buffer ±10
-  startFrame = Math.max(0, startFrame-10);
-  endFrame = Math.min(frames.length-1, endFrame+10);
-  
-  // Fallback: if trim too small (<20% of video), use 25-75%
-  if((endFrame-startFrame)<frames.length*0.2){
-    console.warn('[AutoTrim] Too aggressive, using 25-75% fallback');
-    startFrame=Math.floor(frames.length*0.25);
-    endFrame=Math.floor(frames.length*0.75);
+  function sm(a){return a.map((_,i)=>{let s=0,n=0;for(let j=i-2;j<=i+2;j++)if(j>=0&&j<a.length){s+=a[j];n++;}return n>0?s/n:0;});}
+  const smoothed=sm(motion);
+
+  // Normalize
+  const mean=smoothed.reduce((a,b)=>a+b,0)/N;
+  const normalized=smoothed.map(v=>v-mean);
+
+  // Ignore 20% awal dan 10% akhir — only search in 20%-90% range
+  const searchStart=Math.floor(N*0.20);
+  const searchEnd=Math.floor(N*0.90);
+
+  // Find LOCAL peaks in search range (not global max)
+  const peaks=[];
+  for(let i=searchStart+1;i<searchEnd-1;i++){
+    if(normalized[i]>normalized[i-1] && normalized[i]>normalized[i+1] && normalized[i]>0){
+      peaks.push({idx:i, val:normalized[i]});
+    }
   }
-  
-  console.log(`[AutoTrim] Mean:${mean.toFixed(2)}, Peak:${peak.toFixed(2)}@f${peakIdx}, Thresh:${threshold.toFixed(2)}`);
+
+  // Sort by value descending, pick highest local peak
+  peaks.sort((a,b)=>b.val-a.val);
+  let peakIdx;
+  if(peaks.length>0){
+    peakIdx=peaks[0].idx;
+  } else {
+    // Fallback: center of video
+    peakIdx=Math.floor(N/2);
+    console.warn('[AutoTrim] No valid peak found, using center');
+  }
+
+  // Threshold = 50% of peak value
+  const peakVal=normalized[peakIdx];
+  const threshold=peakVal*0.5;
+
+  // Expand from peak to left
+  let startFrame=peakIdx;
+  for(let i=peakIdx-1;i>=0;i--){
+    if(normalized[i]<threshold){startFrame=i+1;break;}
+    if(i===0)startFrame=0;
+  }
+
+  // Expand from peak to right
+  let endFrame=peakIdx;
+  for(let i=peakIdx+1;i<N;i++){
+    if(normalized[i]<threshold){endFrame=i-1;break;}
+    if(i===N-1)endFrame=N-1;
+  }
+
+  // Buffer ±10
+  startFrame=Math.max(0,startFrame-10);
+  endFrame=Math.min(N-1,endFrame+10);
+
+  // Fallback: if trim < 20% of video, use 25-75%
+  if((endFrame-startFrame)<N*0.2){
+    console.warn('[AutoTrim] Trim too small, using 25-75% fallback');
+    startFrame=Math.floor(N*0.25);
+    endFrame=Math.floor(N*0.75);
+  }
+
+  console.log(`[AutoTrim] Mean:${mean.toFixed(2)}, Peak:${peakVal.toFixed(2)}@f${peakIdx}, Thresh:${threshold.toFixed(2)}`);
+  console.log(`[AutoTrim] Peaks found: ${peaks.slice(0,5).map(p=>`f${p.idx}(${p.val.toFixed(1)})`).join(', ')}`);
   console.log(`[AutoTrim] Motion: ${smoothed.map(v=>v.toFixed(1)).join(',')}`);
   console.log(`[AutoTrim] Normalized: ${normalized.map(v=>v.toFixed(1)).join(',')}`);
-  console.log(`[AutoTrim] Result: start=${startFrame}, end=${endFrame} (${endFrame-startFrame+1} of ${frames.length} frames)`);
-  
-  return { startFrame, endFrame };
+  console.log(`[AutoTrim] Result: start=${startFrame}, end=${endFrame}, peak=${peakIdx} (${endFrame-startFrame+1} of ${N} frames)`);
+
+  return { startFrame, endFrame, peakIndex: peakIdx };
 }
+
 
 function detectSwingPhases(trimmedFrames, poseData) {
   const N = trimmedFrames.length;
