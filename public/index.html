@@ -1713,11 +1713,23 @@ function seekVideoToPhase(posId) {
   const card = document.getElementById('phaseCard_' + posId);
   if (card) card.classList.add('active-phase');
   
-  // Seek with seeked event
+  // Pause first
   vid.pause();
+  
+  // Seek and wait for frame render
   const onSeeked = () => {
     vid.removeEventListener('seeked', onSeeked);
-    console.log(`[Seek] ${posId} → target=${targetTime.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s`);
+    
+    // Force frame render
+    if ('requestVideoFrameCallback' in vid) {
+      vid.requestVideoFrameCallback(() => {
+        console.log(`[Seek] ${posId} → target=${targetTime.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s (rvfc)`);
+      });
+    } else {
+      // Fallback: nudge currentTime to force render
+      vid.currentTime = vid.currentTime + 0.00001;
+      console.log(`[Seek] ${posId} → target=${targetTime.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s (nudge)`);
+    }
   };
   vid.addEventListener('seeked', onSeeked);
   vid.currentTime = targetTime;
