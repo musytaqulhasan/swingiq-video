@@ -2007,6 +2007,320 @@ async function uploadToCloudinary(file) {
   return data.url;
 }
 
+// ===== MEDIAPIPE POSE INTEGRATION =====
+
+let poseInstance = null;
+let poseReady = false;
+
+async function initMediaPipePose() {
+  if (poseInstance && poseReady) return poseInstance;
+  
+  return new Promise((resolve, reject) => {
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`
+    });
+    
+    pose.setOptions({
+      modelComplexity: 1,     // 0=lite, 1=full, 2=heavy
+      smoothLandmarks: false,  // no smoothing for static frames
+      enableSegmentation: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    
+    pose.onResults(() => {}); // placeholder, we process inline
+    
+    pose.initialize().then(() => {
+      poseInstance = pose;
+      poseReady = true;
+      console.log('[MediaPipe] Pose initialized');
+      resolve(pose);
+    }).catch(err => {
+      console.error('[MediaPipe] Init failed:', err);
+      reject(err);
+    });
+  });
+}
+
+// Process a single base64 frame through MediaPipe Pose
+async function processFrameWithPose(pose, base64, canvas, ctx) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = async () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      
+      let landmarks = null;
+      pose.onResults((results) => {
+        if (results.poseLandmarks) {
+          landmarks = results.poseLandmarks.map(lm => ({
+            x: lm.x, y: lm.y, z: lm.z, visibility: lm.visibility
+          }));
+        }
+        resolve(landmarks);
+      });
+      
+      await pose.send({ image: canvas });
+    };
+    img.onerror = () => resolve(null);
+    img.src = 'data:image/jpeg;base64,' + base64;
+  });
+}
+
+// Run MediaPipe Pose on all frames, return array of pose data
+async function runMediaPipePose(frames, progressCallback) {
+  const pose = await initMediaPipePose();
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const allPoseData = [];
+  
+  for (let i = 0; i < frames.length; i++) {
+    try {
+      const landmarks = await processFrameWithPose(pose, frames[i].base64, canvas, ctx);
+      allPoseData.push({
+        frameIndex: i,
+        timestamp: frames[i].timestamp,
+        landmarks: landmarks,  // 33 keypoints or null
+        valid: landmarks !== null
+      });
+    } catch(e) {
+      allPoseData.push({ frameIndex: i, timestamp: frames[i].timestamp, landmarks: null, valid: false });
+    }
+    if (progressCallback) progressCallback(i, frames.length);
+  }
+  
+  console.log(`[MediaPipe] Processed ${allPoseData.length} frames, ${allPoseData.filter(p => p.valid).length} valid`);
+  return allPoseData;
+}
+
+// ===== POSE-BASED PHASE DETECTION (P1-P8) =====
+// MediaPipe landmark indices:
+// 11=left_shoulder, 12=right_shoulder, 13=left_elbow, 14=right_elbow
+// 15=left_wrist, 16=right_wrist, 23=left_hip, 24=right_hip
+// 25=left_knee, 26=right_knee, 27=left_ankle, 28=right_ankle
+
+function getAngle(a, b, c) {
+  // Angle at point b (in degrees)
+  const ab = { x: a.x - b.x, y: a.y - b.y };
+  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ab.x * cb.x + ab.y * cb.y;
+  const cross = ab.x * cb.y - ab.y * cb.x;
+  return Math.abs(Math.atan2(cross, dot) * 180 / Math.PI);
+}
+
+function extractPoseMetrics(landmarks) {
+  if (!landmarks) return null;
+  
+  const lShoulder = landmarks[11];
+  const rShoulder = landmarks[12];
+  const lElbow = landmarks[13];
+  const rElbow = landmarks[14];
+  const lWrist = landmarks[15];
+  const rWrist = landmarks[16];
+  const lHip = landmarks[23];
+  const rHip = landmarks[24];
+  const lKnee = landmarks[25];
+  const rKnee = landmarks[26];
+  
+  // Average wrist height (lower y = higher on screen)
+  const avgWristY = (lWrist.y + rWrist.y) / 2;
+  const avgShoulderY = (lShoulder.y + rShoulder.y) / 2;
+  const avgHipY = (lHip.y + rHip.y) / 2;
+  
+  // Wrist height relative to body (0 = hip level, 1 = above head)
+  const bodyHeight = avgHipY - avgShoulderY + 0.0001;
+  const wristRelHeight = (avgHipY - avgWristY) / bodyHeight;
+  
+  // Wrist horizontal spread (distance between wrists)
+  const wristSpread = Math.abs(rWrist.x - lWrist.x);
+  
+  // Hand position relative to shoulders (center x)
+  const shoulderCenterX = (lShoulder.x + rShoulder.x) / 2;
+  const wristCenterX = (lWrist.x + rWrist.x) / 2;
+  const handsOffsetX = wristCenterX - shoulderCenterX;
+  
+  // Shoulder rotation (difference in z or x)
+  const shoulderTiltX = rShoulder.x - lShoulder.x;
+  
+  // Arm extension: elbow angle
+  const lElbowAngle = getAngle(lShoulder, lElbow, lWrist);
+  const rElbowAngle = getAngle(rShoulder, rElbow, rWrist);
+  
+  // Spine angle: shoulder-hip-knee
+  const spineAngle = getAngle(
+    { x: (lShoulder.x + rShoulder.x)/2, y: (lShoulder.y + rShoulder.y)/2 },
+    { x: (lHip.x + rHip.x)/2, y: (lHip.y + rHip.y)/2 },
+    { x: (lKnee.x + rKnee.x)/2, y: (lKnee.y + rKnee.y)/2 }
+  );
+  
+  // Hip rotation proxy
+  const hipSpread = Math.abs(rHip.x - lHip.x);
+  
+  return {
+    avgWristY, avgShoulderY, avgHipY,
+    wristRelHeight,
+    wristSpread,
+    handsOffsetX,
+    shoulderTiltX,
+    lElbowAngle, rElbowAngle,
+    spineAngle,
+    hipSpread,
+    lWrist, rWrist, lShoulder, rShoulder, lHip, rHip, lElbow, rElbow
+  };
+}
+
+function detectPhasesFromPose(allPoseData) {
+  // Extract metrics for all valid frames
+  const metrics = allPoseData.map((pd, i) => ({
+    index: i,
+    timestamp: pd.timestamp,
+    metrics: pd.valid ? extractPoseMetrics(pd.landmarks) : null,
+    landmarks: pd.landmarks
+  })).filter(m => m.metrics !== null);
+  
+  if (metrics.length < 5) return null; // not enough data
+  
+  // Compute wrist speed between consecutive frames
+  for (let i = 0; i < metrics.length; i++) {
+    if (i === 0) { metrics[i].wristSpeed = 0; continue; }
+    const prev = metrics[i-1].metrics;
+    const curr = metrics[i].metrics;
+    const dt = metrics[i].timestamp - metrics[i-1].timestamp;
+    if (dt <= 0) { metrics[i].wristSpeed = 0; continue; }
+    const dx = curr.rWrist.x - prev.rWrist.x;
+    const dy = curr.rWrist.y - prev.rWrist.y;
+    metrics[i].wristSpeed = Math.sqrt(dx*dx + dy*dy) / dt;
+  }
+  
+  const totalFrames = metrics.length;
+  
+  // --- PHASE DETECTION RULES ---
+  // P1 Setup: First frames, wrists near hip level, low speed
+  // P2 Takeaway: Wrists start moving, rel height increasing
+  // P3 Backswing: Wrists at shoulder level, still rising
+  // P4 Top: Wrists at highest point (min wristY = max height)
+  // P5 Downswing: Wrists descending fast
+  // P6 Impact: Wrists near hip level, max speed zone
+  // P7 Follow Through: Wrists rising again after impact
+  // P8 Finish: Wrists high, near end of swing
+  
+  // Find P4 (Top of Backswing) = frame with minimum avgWristY before midpoint
+  const midIdx = Math.floor(totalFrames * 0.6);
+  let p4Idx = 0;
+  let minWristY = Infinity;
+  for (let i = Math.floor(totalFrames * 0.15); i < midIdx; i++) {
+    if (metrics[i].metrics.avgWristY < minWristY) {
+      minWristY = metrics[i].metrics.avgWristY;
+      p4Idx = i;
+    }
+  }
+  
+  // Find P6 (Impact) = max wrist speed after P4
+  let p6Idx = p4Idx + 1;
+  let maxSpeed = 0;
+  for (let i = p4Idx + 1; i < Math.min(p4Idx + Math.floor(totalFrames * 0.4), totalFrames); i++) {
+    if (metrics[i].wristSpeed > maxSpeed) {
+      maxSpeed = metrics[i].wristSpeed;
+      p6Idx = i;
+    }
+  }
+  
+  // P1 Setup: first stable frames (low speed)
+  const p1Idx = 0;
+  
+  // P2 Takeaway: ~1/3 of the way to P4
+  const p2Idx = Math.max(1, Math.round(p4Idx * 0.3));
+  
+  // P3 Backswing: ~2/3 of the way to P4
+  const p3Idx = Math.max(p2Idx + 1, Math.round(p4Idx * 0.65));
+  
+  // P5 Downswing: midpoint between P4 and P6
+  const p5Idx = Math.max(p4Idx + 1, Math.round((p4Idx + p6Idx) / 2));
+  
+  // P7 Follow Through: after impact
+  const p7Idx = Math.min(p6Idx + Math.round((totalFrames - p6Idx) * 0.35), totalFrames - 2);
+  
+  // P8 Finish: near end
+  const p8Idx = Math.min(p7Idx + Math.round((totalFrames - p7Idx) * 0.7), totalFrames - 1);
+  
+  const phases = [
+    { position: 'P1', name: 'Setup/Address', metricIdx: p1Idx },
+    { position: 'P2', name: 'Takeaway', metricIdx: p2Idx },
+    { position: 'P3', name: 'Backswing', metricIdx: p3Idx },
+    { position: 'P4', name: 'Top of Backswing', metricIdx: p4Idx },
+    { position: 'P5', name: 'Downswing', metricIdx: p5Idx },
+    { position: 'P6', name: 'Impact', metricIdx: p6Idx },
+    { position: 'P7', name: 'Follow Through', metricIdx: p7Idx },
+    { position: 'P8', name: 'Finish', metricIdx: p8Idx },
+  ];
+  
+  return phases.map(p => ({
+    position: p.position,
+    name: p.name,
+    frame_index: metrics[p.metricIdx].index,
+    timestamp: metrics[p.metricIdx].timestamp,
+    metrics: metrics[p.metricIdx].metrics,
+    landmarks: metrics[p.metricIdx].landmarks,
+    wristSpeed: metrics[p.metricIdx].wristSpeed
+  }));
+}
+
+// ===== CLUB HEAD TRAJECTORY (Motion Delta) =====
+function detectClubHeadTrajectory(frames, poseData) {
+  // Simple motion-delta approach:
+  // Compare consecutive frames, find the fastest moving region
+  // Focus on area below wrists and away from body (where club head should be)
+  
+  const trajectory = [];
+  
+  for (let i = 1; i < Math.min(frames.length, poseData.length); i++) {
+    if (!poseData[i].valid || !poseData[i-1].valid) continue;
+    
+    const curr = poseData[i].landmarks;
+    const prev = poseData[i-1].landmarks;
+    
+    // Estimate club head position from wrist trajectory + extension
+    // Club head is roughly along the line from elbow through wrist, extended
+    const rWrist = curr[16];
+    const rElbow = curr[14];
+    
+    // Direction vector from elbow to wrist
+    const dx = rWrist.x - rElbow.x;
+    const dy = rWrist.y - rElbow.y;
+    const len = Math.sqrt(dx*dx + dy*dy) + 0.0001;
+    
+    // Extend ~1.5x shaft length beyond wrist
+    const clubHeadX = rWrist.x + (dx / len) * 0.15;
+    const clubHeadY = rWrist.y + (dy / len) * 0.15;
+    
+    // Speed
+    const prevWrist = prev[16];
+    const prevElbow = prev[14];
+    const prevDx = prevWrist.x - prevElbow.x;
+    const prevDy = prevWrist.y - prevElbow.y;
+    const prevLen = Math.sqrt(prevDx*prevDx + prevDy*prevDy) + 0.0001;
+    const prevClubX = prevWrist.x + (prevDx / prevLen) * 0.15;
+    const prevClubY = prevWrist.y + (prevDy / prevLen) * 0.15;
+    
+    const dt = poseData[i].timestamp - poseData[i-1].timestamp;
+    const speed = dt > 0 ? Math.sqrt(
+      Math.pow(clubHeadX - prevClubX, 2) + Math.pow(clubHeadY - prevClubY, 2)
+    ) / dt : 0;
+    
+    trajectory.push({
+      frameIndex: i,
+      timestamp: poseData[i].timestamp,
+      x: clubHeadX,
+      y: clubHeadY,
+      speed: speed
+    });
+  }
+  
+  return trajectory;
+}
+
+
 // ===== DETECT POSITIONS =====
 async function detectPositionsVisual(frames) {
   const payload = { frames: frames.slice(0, 20).map(f => ({ base64: f.base64 })) };
@@ -2076,20 +2390,63 @@ async function startAnalysis() {
 
     const frames = await extractFrames(vid, 25);
 
-    // Step 3: Detect positions
+    // Step 3: MediaPipe Pose Analysis
     updateLoadingStep(3);
     let positions;
+    let poseData = [];
+    let clubTrajectory = [];
+    let mediaPipeSuccess = false;
+
     try {
-      positions = await detectPositionsVisual(frames);
+      poseData = await runMediaPipePose(frames, (i, total) => {
+        const poseProgress = 40 + Math.round((i / total) * 30);
+        pctEl.textContent = poseProgress + '%';
+      });
+
+      const detectedPhases = detectPhasesFromPose(poseData);
+      if (detectedPhases && detectedPhases.length >= 8) {
+        positions = detectedPhases;
+        mediaPipeSuccess = true;
+        console.log('[Analysis] MediaPipe phase detection successful');
+        
+        // Club head trajectory
+        try {
+          clubTrajectory = detectClubHeadTrajectory(frames, poseData);
+          console.log('[Analysis] Club trajectory points:', clubTrajectory.length);
+        } catch(e) {
+          console.warn('[Analysis] Club trajectory failed:', e);
+        }
+      } else {
+        throw new Error('Insufficient pose data');
+      }
     } catch(e) {
-      positions = generateFallbackPositions(frames.length);
+      console.warn('[Analysis] MediaPipe failed, falling back to GPT-4o detection:', e.message);
+      try {
+        positions = await detectPositionsVisual(frames);
+      } catch(e2) {
+        positions = generateFallbackPositions(frames.length);
+      }
     }
 
-    // Step 4: Select best frames & analyze
+    // Step 4: Select best frames & prepare for analysis
     updateLoadingStep(4);
-    const selectedFrames = positions.slice(0, 10).map(p => {
+    const selectedFrames = (mediaPipeSuccess ? positions : positions.slice(0, 10)).map(p => {
       const idx = Math.min(p.frame_index, frames.length - 1);
-      return { ...frames[idx], right_wrist: null, right_elbow: null };
+      const poseFrame = poseData[idx];
+      
+      // Extract real keypoints if available
+      let rightWrist = null, rightElbow = null;
+      if (poseFrame && poseFrame.valid && poseFrame.landmarks) {
+        rightWrist = { x: poseFrame.landmarks[16].x, y: poseFrame.landmarks[16].y };
+        rightElbow = { x: poseFrame.landmarks[14].x, y: poseFrame.landmarks[14].y };
+      }
+      
+      return {
+        ...frames[idx],
+        right_wrist: rightWrist,
+        right_elbow: rightElbow,
+        landmarks: (poseFrame && poseFrame.valid) ? poseFrame.landmarks : null
+      };
     });
 
     // Re-extract HQ frames
@@ -2100,15 +2457,39 @@ async function startAnalysis() {
       } catch(e) {}
     }
 
+    // Prepare positions for API (with metrics if available)
+    const positionsForApi = (mediaPipeSuccess ? positions : positions.slice(0, 10)).map(p => ({
+      position: p.position,
+      name: p.name,
+      frame_index: p.frame_index,
+      wristSpeed: p.wristSpeed || null,
+      metrics: p.metrics ? {
+        wristRelHeight: p.metrics.wristRelHeight,
+        spineAngle: p.metrics.spineAngle,
+        shoulderTiltX: p.metrics.shoulderTiltX,
+        hipSpread: p.metrics.hipSpread,
+        lElbowAngle: p.metrics.lElbowAngle,
+        rElbowAngle: p.metrics.rElbowAngle,
+        handsOffsetX: p.metrics.handsOffsetX
+      } : null
+    }));
+
     // Call analyze API
     const analyzeRes = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        frames: selectedFrames,
-        positions: positions.slice(0, 10),
+        frames: selectedFrames.map(f => ({
+          base64: f.base64,
+          timestamp: f.timestamp,
+          right_wrist: f.right_wrist,
+          right_elbow: f.right_elbow
+        })),
+        positions: positionsForApi,
         viewAngle: selectedView,
-        club: selectedClub
+        club: selectedClub,
+        mediaPipeDetected: mediaPipeSuccess,
+        clubTrajectory: clubTrajectory.length > 0 ? clubTrajectory : null
       })
     });
 
