@@ -2288,21 +2288,16 @@ function detectPhasesFromPose(allPoseData) {
   // ===== STEP 1: Extract raw wrist data with validity check =====
   const rawData = allPoseData.map((pd, i) => {
     if (!pd.valid || !pd.landmarks) return { index: i, timestamp: pd.timestamp, valid: false };
-    const rWrist = pd.landmarks[16];
-    const lWrist = pd.landmarks[15];
-    const rShoulder = pd.landmarks[12];
-    const lShoulder = pd.landmarks[11];
-    const rHip = pd.landmarks[24];
-    const lHip = pd.landmarks[23];
+    const rWrist = pd.landmarks[16], lWrist = pd.landmarks[15];
+    const rShoulder = pd.landmarks[12], lShoulder = pd.landmarks[11];
+    const rHip = pd.landmarks[24], lHip = pd.landmarks[23];
     if (rWrist.visibility < VISIBILITY_THRESHOLD && lWrist.visibility < VISIBILITY_THRESHOLD) {
       return { index: i, timestamp: pd.timestamp, valid: false };
     }
     return {
       index: i, timestamp: pd.timestamp, valid: true,
-      wristX: (rWrist.x + lWrist.x) / 2,
-      wristY: (rWrist.y + lWrist.y) / 2,
-      shoulderY: (rShoulder.y + lShoulder.y) / 2,
-      hipY: (rHip.y + lHip.y) / 2,
+      wristX: (rWrist.x + lWrist.x) / 2, wristY: (rWrist.y + lWrist.y) / 2,
+      shoulderY: (rShoulder.y + lShoulder.y) / 2, hipY: (rHip.y + lHip.y) / 2,
       landmarks: pd.landmarks
     };
   });
@@ -2312,13 +2307,12 @@ function detectPhasesFromPose(allPoseData) {
   if (validCount < 5) return null;
   
   // ===== STEP 2: Interpolation for missing frames =====
-  function findPrevValid(idx) { for (let i = idx-1; i >= 0; i--) { if (rawData[i].valid) return i; } return -1; }
-  function findNextValid(idx) { for (let i = idx+1; i < totalFrames; i++) { if (rawData[i].valid) return i; } return -1; }
+  function findPrevValid(idx) { for (let i = idx-1; i >= 0; i--) if (rawData[i].valid) return i; return -1; }
+  function findNextValid(idx) { for (let i = idx+1; i < totalFrames; i++) if (rawData[i].valid) return i; return -1; }
   
   const interpolated = rawData.map((d, i) => {
     if (d.valid) return { ...d };
-    const prev = findPrevValid(i);
-    const next = findNextValid(i);
+    const prev = findPrevValid(i), next = findNextValid(i);
     if (prev === -1 || next === -1) return { ...d };
     const t = (i - prev) / (next - prev);
     return {
@@ -2330,29 +2324,27 @@ function detectPhasesFromPose(allPoseData) {
       landmarks: null
     };
   });
-  
   console.log(`[PhaseDetect] After interpolation: ${interpolated.filter(d => d.valid).length} valid`);
   
-  // ===== STEP 3: Smoothing (Moving Average) =====
+  // ===== STEP 3: Smoothing =====
   function smooth(data, w) {
     return data.map((_, i) => {
-      const s = Math.max(0, i - Math.floor(w/2));
-      const e = Math.min(data.length, i + Math.floor(w/2) + 1);
+      const s = Math.max(0, i - Math.floor(w/2)), e = Math.min(data.length, i + Math.floor(w/2) + 1);
       const sl = data.slice(s, e).filter(v => v !== null);
       return sl.length > 0 ? sl.reduce((a, b) => a + b) / sl.length : null;
     });
   }
   function fillNulls(arr) {
     const f = [...arr];
-    for (let i = 1; i < f.length; i++) { if (f[i] === null) f[i] = f[i-1]; }
-    for (let i = f.length-2; i >= 0; i--) { if (f[i] === null) f[i] = f[i+1]; }
+    for (let i = 1; i < f.length; i++) if (f[i] === null) f[i] = f[i-1];
+    for (let i = f.length-2; i >= 0; i--) if (f[i] === null) f[i] = f[i+1];
     return f;
   }
   
   const wristX = smooth(fillNulls(interpolated.map(d => d.valid ? d.wristX : null)), SMOOTH_WINDOW);
   const wristY = smooth(fillNulls(interpolated.map(d => d.valid ? d.wristY : null)), SMOOTH_WINDOW);
   
-  // ===== STEP 4: Compute velocity (screen coords: Y increases downward) =====
+  // ===== STEP 4: Velocity =====
   const velocityY = wristY.map((y, i) => {
     if (i === 0 || y === null || wristY[i-1] === null) return 0;
     const dt = interpolated[i].timestamp - interpolated[i-1].timestamp;
@@ -2360,79 +2352,133 @@ function detectPhasesFromPose(allPoseData) {
   });
   const velYSmooth = smooth(velocityY, SMOOTH_WINDOW);
   
-  // ===== STEP 5: P4 (Top) = minimum wristY in first 55% =====
-  const searchStart = Math.floor(totalFrames * 0.1);
-  const searchEnd = Math.floor(totalFrames * 0.55);
-  let p4Idx = searchStart, minY = Infinity;
-  for (let i = searchStart; i < searchEnd; i++) {
+  // ===== STEP 5: SWING BOUNDARY DETECTION (AUTO-TRIM) =====
+  // The swing is the period of significant wrist movement.
+  // Idle = wrist barely moving. Swing = wrist moving fast.
+  // Compute rolling speed (absolute velocity)
+  const absVel = velYSmooth.map(v => Math.abs(v || 0));
+  const maxAbsVel = Math.max(...absVel);
+  const velThreshold = maxAbsVel * 0.08; // 8% of peak velocity = "moving"
+  
+  // Find swing start: first frame where velocity exceeds threshold
+  let swingStart = 0;
+  for (let i = 0; i < totalFrames; i++) {
+    if (absVel[i] > velThreshold) { swingStart = Math.max(0, i - 2); break; }
+  }
+  
+  // Find swing end: last frame where velocity exceeds threshold
+  let swingEnd = totalFrames - 1;
+  for (let i = totalFrames - 1; i >= 0; i--) {
+    if (absVel[i] > velThreshold) { swingEnd = Math.min(totalFrames - 1, i + 2); break; }
+  }
+  
+  console.log(`[PhaseDetect] Swing boundary: frame ${swingStart}(t=${interpolated[swingStart].timestamp.toFixed(3)}) → frame ${swingEnd}(t=${interpolated[swingEnd].timestamp.toFixed(3)})`);
+  
+  // P1 = swing start (first movement)
+  const p1Idx = swingStart;
+  // P8 = swing end (last movement)  
+  const p8Idx = swingEnd;
+  
+  // ===== STEP 6: P4 (Top) = minimum wristY between swing start and 65% of swing =====
+  const swingLen = swingEnd - swingStart;
+  const p4SearchStart = swingStart + Math.floor(swingLen * 0.15);
+  const p4SearchEnd = swingStart + Math.floor(swingLen * 0.60);
+  let p4Idx = p4SearchStart, minY = Infinity;
+  for (let i = p4SearchStart; i <= p4SearchEnd; i++) {
     if (wristY[i] !== null && wristY[i] < minY) { minY = wristY[i]; p4Idx = i; }
   }
   
-  // ===== STEP 6: P6 (Impact) = min Y + velocity direction change AFTER P4 =====
-  const impactEnd = Math.min(p4Idx + Math.floor(totalFrames * 0.45), totalFrames - 2);
+  console.log(`[PhaseDetect] P4(Top) = frame${p4Idx}, wY=${wristY[p4Idx]?.toFixed(3)}, t=${interpolated[p4Idx].timestamp.toFixed(3)}`);
+  
+  // ===== STEP 7: P6 (Impact) = wristY returns to near-setup level AFTER P4 =====
+  // In MediaPipe: Y increases downward. Setup wristY ~ hip level.
+  // At impact: wrist returns to approximately setup Y level.
+  // Also: velocity changes from positive (going down) to negative (going up) after impact.
+  const setupWristY = wristY[p1Idx] || 0.5;
+  const impactSearchEnd = Math.min(p4Idx + Math.floor(swingLen * 0.5), swingEnd - 2);
+  
+  // Method: combined score
   const candidates = [];
-  for (let i = p4Idx + 2; i < impactEnd; i++) {
+  for (let i = p4Idx + 2; i <= impactSearchEnd; i++) {
     if (wristY[i] === null) continue;
-    const localMinY = wristY[i] <= Math.min(...wristY.slice(Math.max(0,i-2), i+3).filter(v => v !== null));
-    const vBefore = velYSmooth[i-1] || 0;
-    const vAfter = velYSmooth[Math.min(i+1, totalFrames-1)] || 0;
-    // In screen coords: positive velY = wrist going down, negative = going up
-    // Impact: wrist was going down (pos), then starts going up (neg) = direction change
-    const dirChange = vBefore > 0.05 && vAfter < 0;
     let score = 0;
-    if (localMinY) score += 3;
-    if (dirChange) score += 3;
-    if (score >= 3) candidates.push({ idx: i, score, y: wristY[i] });
+    
+    // 1. wristY close to setup level (within 0.05)
+    const yDiffFromSetup = Math.abs(wristY[i] - setupWristY);
+    if (yDiffFromSetup < 0.03) score += 4;
+    else if (yDiffFromSetup < 0.06) score += 3;
+    else if (yDiffFromSetup < 0.10) score += 1;
+    
+    // 2. Local minimum Y in neighborhood
+    const neighborhood = wristY.slice(Math.max(0, i-2), i+3).filter(v => v !== null);
+    if (neighborhood.length > 0 && wristY[i] >= Math.max(...neighborhood) - 0.01) score += 2;
+    
+    // 3. Velocity direction change: was going down (pos vel), now going up (neg vel)
+    const vBefore = velYSmooth[Math.max(0, i-1)] || 0;
+    const vAfter = velYSmooth[Math.min(i+1, totalFrames-1)] || 0;
+    if (vBefore > 0.05 && vAfter < 0) score += 3;
+    else if (vBefore > 0 && vAfter <= 0) score += 1;
+    
+    if (score >= 3) candidates.push({ idx: i, score, y: wristY[i], yDiff: yDiffFromSetup });
   }
   
   let p6Idx;
   if (candidates.length > 0) {
-    candidates.sort((a, b) => b.score - a.score || a.y - b.y);
+    candidates.sort((a, b) => b.score - a.score || a.yDiff - b.yDiff);
     p6Idx = candidates[0].idx;
+    console.log(`[PhaseDetect] P6 candidates: ${candidates.slice(0,3).map(c => `f${c.idx}(score=${c.score},yDiff=${c.yDiff.toFixed(3)})`).join(', ')}`);
   } else {
-    // Fallback: minimum wristY after P4
-    let minYPost = Infinity;
-    p6Idx = p4Idx + Math.floor((totalFrames - p4Idx) * 0.3);
-    for (let i = p4Idx + 1; i < impactEnd; i++) {
-      if (wristY[i] !== null && wristY[i] < minYPost) { minYPost = wristY[i]; p6Idx = i; }
+    // Fallback: frame where wristY is closest to setupWristY after P4
+    let bestDiff = Infinity;
+    p6Idx = p4Idx + Math.floor((swingEnd - p4Idx) * 0.3);
+    for (let i = p4Idx + 1; i <= impactSearchEnd; i++) {
+      if (wristY[i] === null) continue;
+      const diff = Math.abs(wristY[i] - setupWristY);
+      if (diff < bestDiff) { bestDiff = diff; p6Idx = i; }
     }
+    console.log(`[PhaseDetect] P6 fallback: frame${p6Idx}`);
   }
-  p6Idx = Math.max(p4Idx + 1, p6Idx);
+  p6Idx = Math.max(p4Idx + 2, Math.min(p6Idx, swingEnd - 3));
   
-  // ===== STEP 7: P5 (Downswing) = max downward velocity between P4 and P6 =====
+  // ===== STEP 8: P5 (Downswing) = max positive velocity between P4 and P6 =====
   let p5Idx = Math.round((p4Idx + p6Idx) / 2);
   let maxDownVel = -Infinity;
   for (let i = p4Idx + 1; i < p6Idx; i++) {
-    if (velYSmooth[i] > maxDownVel) { maxDownVel = velYSmooth[i]; p5Idx = i; }
+    const v = velYSmooth[i] || 0;
+    if (v > maxDownVel) { maxDownVel = v; p5Idx = i; }
   }
   p5Idx = Math.max(p4Idx + 1, Math.min(p5Idx, p6Idx - 1));
   
-  // ===== STEP 8: P7 (Follow Through) = after impact, wrist going UP =====
+  // ===== STEP 9: P7 (Follow Through) = after impact, wrist going UP (vel negative) =====
+  // In follow through: wristY DECREASES (hands go up) = velocity negative
   let p7Idx = null;
-  for (let i = p6Idx + 1; i < totalFrames - 1; i++) {
-    // Wrist moving up (negative velocity in screen coords)
-    if (velYSmooth[i] < -0.01 && wristY[i] !== null && wristY[i] < (wristY[p6Idx] || 1) - 0.02) {
+  for (let i = p6Idx + 1; i <= swingEnd - 1; i++) {
+    const v = velYSmooth[i] || 0;
+    // Wrist moving up significantly
+    if (v < -0.05 && wristY[i] !== null && wristY[i] < (wristY[p6Idx] || 1) - 0.01) {
       p7Idx = i; break;
     }
   }
-  if (p7Idx === null) p7Idx = Math.min(p6Idx + Math.floor((totalFrames - p6Idx) * 0.4), totalFrames - 2);
-  
-  // ===== STEP 9: P1, P2, P3, P8 =====
-  const p1Idx = 0;
-  let p2Idx = Math.max(1, Math.round(p4Idx * 0.3));
-  for (let i = 1; i < p4Idx; i++) {
-    if (wristX[i] === null || wristY[i] === null) continue;
-    const dist = Math.sqrt(Math.pow((wristX[i]||0) - (wristX[0]||0), 2) + Math.pow((wristY[i]||0) - (wristY[0]||0), 2));
-    if (dist > 0.03) { p2Idx = i; break; }
+  // Fallback: 40-50% between P6 and swing end
+  if (p7Idx === null) {
+    p7Idx = Math.min(p6Idx + Math.max(2, Math.floor((swingEnd - p6Idx) * 0.45)), swingEnd - 1);
   }
-  p2Idx = Math.max(1, Math.min(p2Idx, p4Idx - 2));
   
-  let p3Idx = Math.round(p4Idx * 0.7);
+  // ===== STEP 10: P2 (Takeaway) & P3 (Backswing) =====
+  // P2: first significant wrist movement from setup
+  let p2Idx = Math.max(p1Idx + 1, Math.round(p1Idx + (p4Idx - p1Idx) * 0.25));
+  for (let i = p1Idx + 1; i < p4Idx; i++) {
+    if (wristX[i] === null || wristY[i] === null) continue;
+    const dist = Math.sqrt(Math.pow((wristX[i]||0) - (wristX[p1Idx]||0), 2) + Math.pow((wristY[i]||0) - (wristY[p1Idx]||0), 2));
+    if (dist > 0.025) { p2Idx = i; break; }
+  }
+  p2Idx = Math.max(p1Idx + 1, Math.min(p2Idx, p4Idx - 2));
+  
+  // P3: ~65-70% between P1 and P4
+  let p3Idx = Math.round(p1Idx + (p4Idx - p1Idx) * 0.68);
   p3Idx = Math.max(p2Idx + 1, Math.min(p3Idx, p4Idx - 1));
   
-  let p8Idx = Math.min(Math.max(p7Idx + 2, totalFrames - 3), totalFrames - 1);
-  
-  // Ensure strictly increasing
+  // ===== Ensure strictly increasing =====
   const indices = [p1Idx, p2Idx, p3Idx, p4Idx, p5Idx, p6Idx, p7Idx, p8Idx];
   for (let i = 1; i < indices.length; i++) {
     if (indices[i] <= indices[i-1]) indices[i] = Math.min(indices[i-1] + 1, totalFrames - 1);
@@ -2445,8 +2491,8 @@ function detectPhasesFromPose(allPoseData) {
     { position: 'P7', name: 'Follow Through' }, { position: 'P8', name: 'Finish' },
   ];
   
-  console.log('[PhaseDetect] ' + indices.map((idx, i) =>
-    `${phaseNames[i].position}=f${idx}(t=${interpolated[idx].timestamp.toFixed(3)},wY=${(wristY[idx]||0).toFixed(3)},vY=${(velYSmooth[idx]||0).toFixed(3)})`
+  console.log('[PhaseDetect] FINAL: ' + indices.map((idx, i) =>
+    `${phaseNames[i].position}=f${idx}(t=${interpolated[idx].timestamp.toFixed(2)},wY=${(wristY[idx]||0).toFixed(3)},vY=${(velYSmooth[idx]||0).toFixed(3)})`
   ).join(', '));
   
   return phaseNames.map((p, i) => {
