@@ -1697,25 +1697,30 @@ function seekVideoToPhase(posId) {
   const vid = document.getElementById('resultVideo');
   if (!vid || !vid.duration) return;
   
-  // Use stored real timestamps
   const timestamps = window._phaseTimestamps || {};
   const t = timestamps[posId];
   
+  let targetTime;
   if (t !== undefined && t !== null) {
-    vid.currentTime = t;
-    console.log(`[Seek] ${posId} → t=${t.toFixed(3)}s`);
+    targetTime = t;
   } else {
-    // Fallback: ratio-based
     const fallbackRatios = { P1:0.05, P2:0.20, P3:0.35, P4:0.55, P5:0.62, P6:0.68, P7:0.80, P8:0.92 };
-    const ratio = fallbackRatios[posId] || 0;
-    vid.currentTime = ratio * vid.duration;
-    console.log(`[Seek] ${posId} → fallback ratio ${ratio}`);
+    targetTime = (fallbackRatios[posId] || 0) * vid.duration;
   }
   
+  // Highlight card immediately
   document.querySelectorAll('.phase-card').forEach(c => c.classList.remove('active-phase'));
   const card = document.getElementById('phaseCard_' + posId);
   if (card) card.classList.add('active-phase');
+  
+  // Seek with seeked event
   vid.pause();
+  const onSeeked = () => {
+    vid.removeEventListener('seeked', onSeeked);
+    console.log(`[Seek] ${posId} → target=${targetTime.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s`);
+  };
+  vid.addEventListener('seeked', onSeeked);
+  vid.currentTime = targetTime;
 }
 
 // ===== VIDEO CONTROLS =====
