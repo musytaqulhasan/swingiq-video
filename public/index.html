@@ -2304,73 +2304,118 @@ function detectPhasesFromPose(allPoseData) {
   const totalFrames = metrics.length;
   
   // --- PHASE DETECTION RULES ---
-  // P1 Setup: First frames, wrists near hip level, low speed
-  // P2 Takeaway: Wrists start moving, rel height increasing
-  // P3 Backswing: Wrists at shoulder level, still rising
-  // P4 Top: Wrists at highest point (min wristY = max height)
-  // P5 Downswing: Wrists descending fast
-  // P6 Impact: Wrists near hip level, max speed zone
-  // P7 Follow Through: Wrists rising again after impact
-  // P8 Finish: Wrists high, near end of swing
+  // Golf swing timing constants (from research):
+  // Backswing (P1→P4): ~65-75% of total swing time
+  // Downswing (P4→P6): ~15-20% of total swing time  
+  // Follow through (P6→P8): ~15-20% of total swing time
+  // Key: downswing is ~3x faster than backswing
   
-  // Find P4 (Top of Backswing) = frame with minimum avgWristY before midpoint
-  const midIdx = Math.floor(totalFrames * 0.6);
+  // Find P4 (Top of Backswing) = frame with minimum avgWristY (highest wrist)
+  // Scan only first 55% of frames — top of backswing is always in first half
+  const scanEnd = Math.floor(totalFrames * 0.55);
   let p4Idx = 0;
   let minWristY = Infinity;
-  for (let i = Math.floor(totalFrames * 0.15); i < midIdx; i++) {
+  for (let i = Math.floor(totalFrames * 0.15); i < scanEnd; i++) {
     if (metrics[i].metrics.avgWristY < minWristY) {
       minWristY = metrics[i].metrics.avgWristY;
       p4Idx = i;
     }
   }
   
-  // Find P6 (Impact) = max wrist speed after P4
-  let p6Idx = p4Idx + 1;
-  let maxSpeed = 0;
-  for (let i = p4Idx + 1; i < Math.min(p4Idx + Math.floor(totalFrames * 0.4), totalFrames); i++) {
-    if (metrics[i].wristSpeed > maxSpeed) {
-      maxSpeed = metrics[i].wristSpeed;
-      p6Idx = i;
+  // P1 Setup: first stable frame (low wrist speed)
+  const p1Idx = 0;
+  
+  // P2 Takeaway: find first frame where wrist has moved significantly from P1
+  // Takeaway = hands have moved noticeably but club is still below waist
+  const p1WristY = metrics[0].metrics.avgWristY;
+  const p1WristX = (metrics[0].metrics.rWrist.x + metrics[0].metrics.lWrist.x) / 2;
+  let p2Idx = Math.max(1, Math.round(p4Idx * 0.35));
+  for (let i = 1; i < p4Idx; i++) {
+    const currWristX = (metrics[i].metrics.rWrist.x + metrics[i].metrics.lWrist.x) / 2;
+    const currWristY = metrics[i].metrics.avgWristY;
+    const moveX = Math.abs(currWristX - p1WristX);
+    const moveY = Math.abs(currWristY - p1WristY);
+    const totalMove = Math.sqrt(moveX * moveX + moveY * moveY);
+    // Takeaway: significant movement but wrist still below shoulder
+    if (totalMove > 0.04 && currWristY > metrics[i].metrics.avgShoulderY) {
+      p2Idx = i;
+      break;
+    }
+  }
+  // Ensure P2 is at least 2 frames after P1 and before half way to P4
+  p2Idx = Math.max(2, Math.min(p2Idx, Math.round(p4Idx * 0.45)));
+  
+  // P3 Backswing: ~65-70% of the way from P1 to P4
+  const p3Idx = Math.max(p2Idx + 1, Math.round(p4Idx * 0.7));
+  
+  // --- POST-P4: Use timing ratios, NOT wrist speed ---
+  // Downswing is very fast (~3x faster than backswing)
+  // From P4 to end of swing, the ratio is roughly:
+  // P5 (downswing): P4 + 30% of remaining frames
+  // P6 (impact):    P4 + 45% of remaining frames  
+  // P7 (follow):    P4 + 65% of remaining frames
+  // P8 (finish):    last frames
+  
+  const framesAfterP4 = totalFrames - p4Idx - 1;
+  
+  // Also try to find impact using wrist returning to hip level
+  let p6ByWristY = null;
+  const hipY = metrics[p1Idx].metrics.avgHipY;
+  for (let i = p4Idx + 1; i < totalFrames; i++) {
+    // Impact: wrist drops back close to hip level (within threshold)
+    if (metrics[i].metrics.avgWristY > hipY - 0.08) {
+      p6ByWristY = i;
+      break;
     }
   }
   
-  // P1 Setup: first stable frames (low speed)
-  const p1Idx = 0;
+  // P6: prefer wrist-Y detection if it's reasonable, otherwise use timing
+  let p6Idx;
+  if (p6ByWristY && p6ByWristY < p4Idx + Math.round(framesAfterP4 * 0.6)) {
+    p6Idx = p6ByWristY;
+  } else {
+    p6Idx = Math.min(p4Idx + Math.max(2, Math.round(framesAfterP4 * 0.4)), totalFrames - 3);
+  }
   
-  // P2 Takeaway: ~1/3 of the way to P4
-  const p2Idx = Math.max(1, Math.round(p4Idx * 0.3));
-  
-  // P3 Backswing: ~2/3 of the way to P4
-  const p3Idx = Math.max(p2Idx + 1, Math.round(p4Idx * 0.65));
-  
-  // P5 Downswing: midpoint between P4 and P6
+  // P5: midpoint between P4 and P6
   const p5Idx = Math.max(p4Idx + 1, Math.round((p4Idx + p6Idx) / 2));
   
-  // P7 Follow Through: after impact
-  const p7Idx = Math.min(p6Idx + Math.round((totalFrames - p6Idx) * 0.35), totalFrames - 2);
+  // P7: after impact, wrists rising — ~55% between P6 and end
+  const framesAfterP6 = totalFrames - p6Idx - 1;
+  const p7Idx = Math.min(p6Idx + Math.max(1, Math.round(framesAfterP6 * 0.45)), totalFrames - 2);
   
-  // P8 Finish: near end
-  const p8Idx = Math.min(p7Idx + Math.round((totalFrames - p7Idx) * 0.7), totalFrames - 1);
+  // P8: near the end
+  const p8Idx = Math.min(Math.max(p7Idx + 1, totalFrames - 2), totalFrames - 1);
   
-  const phases = [
-    { position: 'P1', name: 'Setup/Address', metricIdx: p1Idx },
-    { position: 'P2', name: 'Takeaway', metricIdx: p2Idx },
-    { position: 'P3', name: 'Backswing', metricIdx: p3Idx },
-    { position: 'P4', name: 'Top of Backswing', metricIdx: p4Idx },
-    { position: 'P5', name: 'Downswing', metricIdx: p5Idx },
-    { position: 'P6', name: 'Impact', metricIdx: p6Idx },
-    { position: 'P7', name: 'Follow Through', metricIdx: p7Idx },
-    { position: 'P8', name: 'Finish', metricIdx: p8Idx },
+  // Safety: ensure all indices are strictly increasing
+  const indices = [p1Idx, p2Idx, p3Idx, p4Idx, p5Idx, p6Idx, p7Idx, p8Idx];
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] <= indices[i-1]) {
+      indices[i] = Math.min(indices[i-1] + 1, totalFrames - 1);
+    }
+  }
+  
+  const phaseNames = [
+    { position: 'P1', name: 'Setup/Address' },
+    { position: 'P2', name: 'Takeaway' },
+    { position: 'P3', name: 'Backswing' },
+    { position: 'P4', name: 'Top of Backswing' },
+    { position: 'P5', name: 'Downswing' },
+    { position: 'P6', name: 'Impact' },
+    { position: 'P7', name: 'Follow Through' },
+    { position: 'P8', name: 'Finish' },
   ];
   
-  return phases.map(p => ({
+  console.log('[Phase Detection] Indices:', indices.map((idx, i) => `${phaseNames[i].position}=frame${idx}`).join(', '));
+  
+  return phaseNames.map((p, i) => ({
     position: p.position,
     name: p.name,
-    frame_index: metrics[p.metricIdx].index,
-    timestamp: metrics[p.metricIdx].timestamp,
-    metrics: metrics[p.metricIdx].metrics,
-    landmarks: metrics[p.metricIdx].landmarks,
-    wristSpeed: metrics[p.metricIdx].wristSpeed
+    frame_index: metrics[indices[i]].index,
+    timestamp: metrics[indices[i]].timestamp,
+    metrics: metrics[indices[i]].metrics,
+    landmarks: metrics[indices[i]].landmarks,
+    wristSpeed: metrics[indices[i]].wristSpeed
   }));
 }
 
