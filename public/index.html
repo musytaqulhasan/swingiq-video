@@ -2357,71 +2357,82 @@ function detectPhasesFromPose(allPoseData) {
   for(let i=p4S;i<=p4E;i++)if(wY[i]!==null&&wY[i]<minY){minY=wY[i];p4=i;}
   console.log(`[Phase] P4=f${p4}(t=${interp[p4].t.toFixed(2)},wY=${wY[p4]?.toFixed(3)})`);
 
-  // ===== STEP 7: P6 (Impact) = MULTI-SIGNAL SCORING =====
-  const impEnd=Math.min(p4+Math.floor(swLen*0.45),swE-2);
-  const setupWY=wY[swS]||0.5;
-  const setupHipA=hipA[swS]||0;
-  let bestImpact=-1, bestScore=-999;
-
-  for(let i=p4+2;i<=impEnd;i++){
-    if(wY[i]===null)continue;
-    let score=0;
-
-    // Signal 1: wristY close to setup level (back near ball)
-    const yDiff=Math.abs(wY[i]-setupWY);
-    if(yDiff<0.03)score+=3;else if(yDiff<0.06)score+=2;else if(yDiff<0.10)score+=1;
-
-    // Signal 2: wristX at local maximum (most forward)
-    const xNeighbors=wX.slice(Math.max(0,i-2),i+3).filter(v=>v!==null);
-    if(xNeighbors.length>0&&wX[i]>=Math.max(...xNeighbors)-0.005)score+=2;
-
-    // Signal 3: wrist velocity direction change (pos→neg in screen coords)
-    const vBef=vYs[Math.max(0,i-1)]||0, vAft=vYs[Math.min(i+1,N-1)]||0;
-    if(vBef>0.02&&vAft<0)score+=3;
-    else if(vBef>0&&vAft<=0.01)score+=1;
-
-    // Signal 4: hip rotation increasing (rotating toward target)
-    if(hipVs[i]>0.01||(hipA[i]||0)>(setupHipA+0.02))score+=2;
-
-    // Signal 5: hip spread changing (rotation indicator)
-    const setupHipSp=hipSp[swS]||0.1;
-    if(hipSp[i]!==null&&Math.abs(hipSp[i]-setupHipSp)>0.01)score+=1;
-
-    if(score>bestScore){bestScore=score;bestImpact=i;}
+  // ===== STEP 7: P6 (Impact) = FIRST VALID EVENT within 0.5s of P4 =====
+  // KEY INSIGHT: Impact MUST happen within ~0.3-0.5s after top of backswing
+  // Search ONLY in this tight window, and pick FIRST match, not best score
+  const p4Time = interp[p4].t;
+  const MAX_DOWNSWING_SEC = 0.5;
+  const impEndTime = p4Time + MAX_DOWNSWING_SEC;
+  
+  // Find frame index limit for the time window
+  let impEndIdx = p4 + 2;
+  for (let i = p4 + 1; i < N; i++) {
+    if (interp[i].t > impEndTime) break;
+    impEndIdx = i;
   }
-
-  let p6=bestImpact>=0?bestImpact:p4+Math.floor((swE-p4)*0.3);
-  p6=Math.max(p4+2,Math.min(p6,swE-3));
-  console.log(`[Phase] P6=f${p6}(t=${interp[p6].t.toFixed(2)},wY=${wY[p6]?.toFixed(3)},score=${bestScore},hipA=${hipA[p6]?.toFixed(3)})`);
-
-  // ===== STEP 8: P5 (Downswing) =====
-  // Before impact: max downward velocity + shoulder still relatively closed
-  let p5=Math.round((p4+p6)/2), bestDV=-Infinity;
-  for(let i=p4+1;i<p6;i++){
-    const v=vYs[i]||0;
-    // Positive velY = wrist going down in screen coords = downswing
-    // Also check: shoulder still relatively closed (similar to setup)
-    let dScore=v;
-    const shDiff=Math.abs((shA[i]||0)-(shA[swS]||0));
-    if(shDiff<0.15)dScore+=0.1; // bonus: shoulder still closed
-    if(dScore>bestDV){bestDV=dScore;p5=i;}
+  impEndIdx = Math.min(impEndIdx, swE - 2);
+  
+  console.log(`[Phase] Impact search: f${p4+1}(t=${interp[p4+1]?.t.toFixed(2)}) → f${impEndIdx}(t=${interp[impEndIdx]?.t.toFixed(2)}) [max ${MAX_DOWNSWING_SEC}s after P4]`);
+  
+  // Method: Find FIRST frame where velocity changes from positive to negative (or near zero)
+  // In screen coords: positive velY = wrist going down, negative = going up
+  // At impact: wrist stops going down and starts going up
+  let p6 = -1;
+  
+  // First try: velocity direction change
+  for (let i = p4 + 2; i <= impEndIdx; i++) {
+    const vBef = vYs[Math.max(0, i-1)] || 0;
+    const vAft = vYs[Math.min(i+1, N-1)] || 0;
+    if (vBef > 0.01 && vAft < 0.01) {
+      p6 = i;
+      console.log(`[Phase] P6 found by velocity change at f${i}(t=${interp[i].t.toFixed(3)})`);
+      break;
+    }
   }
-  p5=Math.max(p4+1,Math.min(p5,p6-1));
-
-  // ===== STEP 9: P7 (Follow Through) =====
-  // After impact: wrist going UP + hip rotated more than at impact + shoulder opening
-  let p7=null;
-  const impactHipA=hipA[p6]||0;
-  for(let i=p6+1;i<=swE-1;i++){
-    const v=vYs[i]||0;
-    const hA=hipA[i]||0;
-    const sA=shA[i]||0;
-    // Wrist moving up (negative velY) AND hip rotated past impact
-    if(v<-0.02){p7=i;break;}
-    // OR: shoulder significantly more open than at impact
-    if(Math.abs(sA-(shA[p6]||0))>0.05){p7=i;break;}
+  
+  // Second try: maximum wristY (lowest point) in window
+  if (p6 < 0) {
+    let maxWY = -Infinity;
+    for (let i = p4 + 1; i <= impEndIdx; i++) {
+      if (wY[i] !== null && wY[i] > maxWY) { maxWY = wY[i]; p6 = i; }
+    }
+    console.log(`[Phase] P6 fallback (max wristY) at f${p6}(t=${interp[p6]?.t.toFixed(3)})`);
   }
-  if(p7===null)p7=Math.min(p6+Math.max(2,Math.floor((swE-p6)*0.4)),swE-1);
+  
+  // Last fallback
+  if (p6 < 0) p6 = Math.min(p4 + 3, swE - 3);
+  p6 = Math.max(p4 + 2, p6);
+  
+  console.log(`[Phase] P6=f${p6}(t=${interp[p6].t.toFixed(2)},wY=${wY[p6]?.toFixed(3)},hipA=${hipA[p6]?.toFixed(3)})`);
+
+  // ===== STEP 8: P5 (Downswing) = midpoint between P4 and P6 =====
+  // Downswing is between P4 and P6 — pick midpoint or max downward velocity
+  let p5 = Math.round((p4 + p6) / 2);
+  if (p6 - p4 > 2) {
+    let bestDV = -Infinity;
+    for (let i = p4 + 1; i < p6; i++) {
+      const v = vYs[i] || 0;
+      if (v > bestDV) { bestDV = v; p5 = i; }
+    }
+  }
+  p5 = Math.max(p4 + 1, Math.min(p5, p6 - 1));
+
+  // ===== STEP 9: P7 (Follow Through) = first upward motion after impact =====
+  // Constrain: P7 should be within ~0.5s after P6
+  const p6Time = interp[p6].t;
+  const maxFollowTime = p6Time + 0.6;
+  let p7 = null;
+  for (let i = p6 + 1; i < N && interp[i].t <= maxFollowTime; i++) {
+    const v = vYs[i] || 0;
+    if (v < -0.02) { p7 = i; break; }
+  }
+  // Fallback: ~0.3s after impact
+  if (p7 === null) {
+    for (let i = p6 + 1; i < N; i++) {
+      if (interp[i].t >= p6Time + 0.25) { p7 = i; break; }
+    }
+  }
+  if (p7 === null) p7 = Math.min(p6 + 3, swE - 1);
 
   // ===== STEP 10: P1,P2,P3,P8 =====
   const p1=swS;
@@ -2667,16 +2678,13 @@ async function autoTrimSwing(frames) {
   
   const smoothPixel = smoothArr(pixelMotion, 3);
   
-  // Adaptive threshold: baseline from first 10 frames (idle) × 3
+  // Peak-based threshold (robust for videos that start with movement)
+  const maxMotion = Math.max(...smoothPixel);
+  const threshold = maxMotion * 0.20;
+  
+  // Also compute baseline for logging
   const first10 = smoothPixel.slice(0, Math.min(10, Math.floor(frames.length * 0.2)));
   const baseline = first10.reduce((a, b) => a + b, 0) / first10.length;
-  let threshold = baseline * 3;
-  
-  // Safety: if baseline is very low (already moving from start), use absolute threshold
-  const maxMotion = Math.max(...smoothPixel);
-  if (threshold < maxMotion * 0.08) {
-    threshold = maxMotion * 0.15;
-  }
   
   // Find start and end
   let startFrame = 0;
