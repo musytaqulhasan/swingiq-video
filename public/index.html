@@ -2510,20 +2510,28 @@ async function detectPositionsVisual(frames) {
     { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
   ])).flat();
 
-  const systemPrompt = `You are a golf swing phase detector. Analyze the sequence of golf swing frames and identify which frame best represents each of the 8 swing positions.
+  const systemPrompt = `You are an expert golf swing phase detector. The frames are in CHRONOLOGICAL ORDER (frame 0 is earliest, highest number is latest). Your job is to find the best frame for each of the 8 swing phases.
 
-IMPORTANT visual cues for each position:
-- P1 Setup/Address: Golfer standing still, club behind ball, knees slightly bent
-- P2 Takeaway: Club has moved back ~30-45°, hands at hip level, weight shifting
-- P3 Backswing: Arms/club at roughly horizontal (~90°), hands at shoulder height
-- P4 Top of Backswing: Hands at highest point, club points backward/down, maximum shoulder turn
-- P5 Downswing: Club coming down, hands dropping from top, hips starting to rotate forward
-- P6 Impact: Club at/near the ball, arms extended down, body facing target slightly
-- P7 Follow Through: Club past the ball, arms extending forward/up, body rotating toward target
-- P8 Finish: Club wrapped around shoulders, body fully facing target, balanced pose
+CRITICAL RULES:
+1. Frame indices MUST be in strictly ascending order: P1 < P2 < P3 < P4 < P5 < P6 < P7 < P8
+2. P4 (Top) is the MIDPOINT of the swing — roughly 35-45% through the sequence
+3. P5-P6-P7 happen VERY QUICKLY after P4 — typically within 5-8 frames of each other
+4. The swing goes: still → back → UP → DOWN → LOW → UP → still
 
-Return ONLY a JSON array (no markdown, no explanation):
-[{"position":"P1","name":"Setup/Address","frame_index":<original_frame_number>},{"position":"P2","name":"Takeaway","frame_index":<n>},{"position":"P3","name":"Backswing","frame_index":<n>},{"position":"P4","name":"Top of Backswing","frame_index":<n>},{"position":"P5","name":"Downswing","frame_index":<n>},{"position":"P6","name":"Impact","frame_index":<n>},{"position":"P7","name":"Follow Through","frame_index":<n>},{"position":"P8","name":"Finish","frame_index":<n>}]`;
+VISUAL CUES (read carefully):
+- P1 Setup/Address: Golfer standing still over ball. Club on ground behind ball. Body bent forward at hips.
+- P2 Takeaway: Club moved slightly back. Hands moved away from body. Club shaft is between horizontal and 45° back.
+- P3 Backswing: Hands are at shoulder height or above. Club is above the head. Body has rotated AWAY from target (back facing camera in DTL view).
+- P4 Top of Backswing: HIGHEST point of hands/club. Maximum body rotation away from target. Club may point downward behind the golfer.
+- P5 Downswing: Club is coming DOWN from top. Hands are DROPPING. Club is still ABOVE waist height. Body is STARTING to rotate toward target. KEY DIFFERENCE from P7: in P5 the golfer's chest still faces AWAY from target.
+- P6 Impact: Club is at its LOWEST point, near the ground/ball. Arms are extended STRAIGHT DOWN. This is the frame where the club head is closest to the ground. Body is roughly facing the ball.
+- P7 Follow Through: Club has passed the ball and is rising UP on the OTHER SIDE. Arms extend forward toward target. Body continues rotating toward target. KEY DIFFERENCE from P5: in P7 the golfer's chest faces TOWARD the target.
+- P8 Finish: Final balanced pose. Club is wrapped behind the body/head. Body fully faces target. Weight is on front foot.
+
+IMPORTANT: P6 (Impact) is the frame where the CLUB HEAD IS CLOSEST TO THE GROUND. Look for the frame where arms point most downward.
+
+Return ONLY a JSON array:
+[{"position":"P1","name":"Setup/Address","frame_index":<n>},{"position":"P2","name":"Takeaway","frame_index":<n>},{"position":"P3","name":"Backswing","frame_index":<n>},{"position":"P4","name":"Top of Backswing","frame_index":<n>},{"position":"P5","name":"Downswing","frame_index":<n>},{"position":"P6","name":"Impact","frame_index":<n>},{"position":"P7","name":"Follow Through","frame_index":<n>},{"position":"P8","name":"Finish","frame_index":<n>}]`;
 
   const payload = {
     service: 'chat',
