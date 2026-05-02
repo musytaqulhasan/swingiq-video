@@ -2541,7 +2541,7 @@ async function startAnalysis() {
       setTimeout(resolve, 10000);
     });
 
-    const frames = await extractFrames(vid, 25);
+    const frames = await extractFrames(vid, 50);
 
     // Step 3: MediaPipe Pose Analysis
     updateLoadingStep(3);
