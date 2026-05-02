@@ -812,40 +812,46 @@ body {
   font-family: monospace;
 }
 
-/* Grade badge */
+/* Grade badge — Beginner=dark orange, Advance=blue, Pro=green */
 .result-grade {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 20px;
   font-size: 10px;
   font-weight: 700;
-  margin-top: 4px;
 }
-.result-grade.good { background: var(--green-bg); color: var(--green); }
-.result-grade.fair { background: var(--orange-bg); color: var(--orange); }
-.result-grade.poor { background: var(--red-bg); color: var(--red); }
+.result-grade.good { background: #dcfce7; color: #16a34a; }
+.result-grade.fair { background: #dbeafe; color: #1d4ed8; }
+.result-grade.poor { background: #ffedd5; color: #c2410c; }
 
-/* Video Preview — 3:4 portrait, full width */
+/* Video Preview — centered 3:4, dark bg on sides */
 .result-video {
   margin: 0;
   position: relative;
-  background: #000;
-  aspect-ratio: 3 / 4;
-  max-height: 56vh;
+  background: #1a1a1a;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
   overflow: hidden;
+  height: 56vh;
 }
 .result-video video {
-  width: 100%;
   height: 100%;
+  width: auto;
+  aspect-ratio: 3 / 4;
   display: block;
   object-fit: cover;
   object-position: center;
+  max-width: 100%;
 }
 /* Canvas overlay */
 .result-video canvas#overlayCanvas {
   position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  height: 100%;
+  width: auto;
+  aspect-ratio: 3 / 4;
   pointer-events: none;
   display: none;
 }
@@ -886,24 +892,42 @@ body {
 .video-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 7px 12px;
   background: #1a1a1a;
 }
-.vc-btn {
-  background: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 6px;
-  color: #ccc;
+.vc-sound-label {
   font-size: 11px;
-  padding: 4px 10px;
-  cursor: pointer;
+  color: #9ca3af;
   white-space: nowrap;
+  min-width: 52px;
 }
-.vc-btn:active { background: #444; }
-.vc-btn.muted { color: #f87171; border-color: #555; }
-.vc-btn.unmuted { color: #4ade80; border-color: #555; }
-.vc-speed-group { display: flex; gap: 3px; margin-left: auto; }
+.vc-sound-label span { color: #e5e7eb; font-weight: 600; }
+.vc-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  background: #374151;
+  outline: none;
+  cursor: pointer;
+}
+.vc-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  cursor: pointer;
+}
+.vc-slider::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  cursor: pointer;
+  border: none;
+}
+.vc-speed-group { display: flex; gap: 3px; }
 .vc-speed {
   background: #2a2a2a;
   border: 1px solid #444;
@@ -941,7 +965,7 @@ body {
   aspect-ratio: 1;
 }
 .phase-card:active { transform: scale(0.92); }
-.phase-card.active-phase { outline: 2px solid #FBBF24; outline-offset: 1px; }
+.phase-card.active-phase { outline: 3px solid #111; outline-offset: 1px; }
 .phase-card.score-green  { border-color: #22c55e; background: #f0fdf4; }
 .phase-card.score-blue   { border-color: #3b82f6; background: #eff6ff; }
 .phase-card.score-red    { border-color: #dc2626; background: #fef2f2; }
@@ -1355,15 +1379,6 @@ body {
       <span class="sub-header-title">Hasil Analisa</span>
     </div>
 
-    <div class="result-header">
-      <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">OVERALL SCORE</div>
-      <div class="result-score-ring">
-        <span class="result-score-num" id="resultScore">—</span>
-      </div>
-      <div class="result-score-label"><span id="resultLabel">/100</span></div>
-      <div class="result-grade good" id="resultGrade">—</div>
-    </div>
-
     <!-- Top info strip: Club | View | Date -->
     <div class="result-strip">
       <div class="result-strip-item">
@@ -1402,9 +1417,11 @@ body {
       </div>
     </div>
 
-    <!-- Video Controls -->
+    <!-- Video Controls: volume slider + speed -->
     <div class="video-controls">
-      <button class="vc-btn muted" id="muteBtn" onclick="toggleMute()">🔇 Sound</button>
+      <div class="vc-sound-label">🔊 <span id="volPct">20%</span></div>
+      <input type="range" class="vc-slider" id="volSlider" min="0" max="100" value="20"
+        oninput="setVolume(this.value)">
       <div class="vc-speed-group">
         <button class="vc-speed" onclick="setSpeed(0.25)">25%</button>
         <button class="vc-speed active" onclick="setSpeed(0.50)">50%</button>
@@ -1586,18 +1603,17 @@ function seekVideoToPhase(ratio, posId) {
 }
 
 // ===== VIDEO CONTROLS =====
-function toggleMute() {
+function setVolume(val) {
   const vid = document.getElementById('resultVideo');
-  const btn = document.getElementById('muteBtn');
-  if (!vid) return;
-  vid.muted = !vid.muted;
-  if (vid.muted) {
-    btn.textContent = '🔇 Sound';
-    btn.className = 'vc-btn muted';
-  } else {
-    btn.textContent = '🔊 Sound';
-    btn.className = 'vc-btn unmuted';
+  const pct = document.getElementById('volPct');
+  const icon = document.querySelector('.vc-sound-label');
+  const v = parseInt(val);
+  if (vid) {
+    vid.volume = v / 100;
+    vid.muted = (v === 0);
   }
+  if (pct) pct.textContent = v + '%';
+  if (icon) icon.childNodes[0].textContent = v === 0 ? '🔇 ' : '🔊 ';
 }
 
 function setSpeed(rate) {
@@ -2093,8 +2109,8 @@ function renderResults(data) {
   const gradeEl = document.getElementById('resultGrade');
   scoreEl.textContent = score;
   const grade = score >= 90 ? 'Professional' : score >= 70 ? 'Advance' : 'Beginner';
-  const scoreColor = score >= 90 ? 'var(--green)' : score >= 70 ? 'var(--blue)' : 'var(--red)';
-  scoreEl.style.color = scoreColor;
+  // Score number color: Pro=green, Advance=blue, Beginner=dark orange
+  scoreEl.style.color = score >= 90 ? '#16a34a' : score >= 70 ? '#1d4ed8' : '#c2410c';
   gradeEl.textContent = grade;
   gradeEl.className = 'result-grade ' + (score >= 90 ? 'good' : score >= 70 ? 'fair' : 'poor');
 
@@ -2106,13 +2122,15 @@ function renderResults(data) {
   vid.loop = true;
   vid.addEventListener('loadedmetadata', () => {
     vid.playbackRate = 0.5;
+    vid.volume = 0.2;
     vid.play().catch(() => {});
   }, { once: true });
 
-  // Sync mute button state
-  const muteBtn = document.getElementById('muteBtn');
-  muteBtn.textContent = '🔇 Sound';
-  muteBtn.className = 'vc-btn muted';
+  // Init volume slider to 20% (muted on load, slider at 20%)
+  const slider = document.getElementById('volSlider');
+  const pctEl = document.getElementById('volPct');
+  if (slider) slider.value = 20;
+  if (pctEl) pctEl.textContent = '20%';
 
   // P1-P8 Phases Grid
   renderPhasesGrid(data.phases);
