@@ -2611,25 +2611,69 @@ async function startAnalysis() {
       setTimeout(resolve, 10000);
     });
 
-    const frames = await extractFrames(vid, 30);
+    // === ADAPTIVE FRAME EXTRACTION ===
+    // Phase 1: Extract 20 frames evenly for initial phase detection
+    const initialFrames = await extractFrames(vid, 20);
+    console.log('[Analysis] Phase 1: Extracted', initialFrames.length, 'initial frames');
 
-    // Step 3: Phase Detection via GPT-4o (visual, more accurate)
+    // Step 3: Quick phase detection to find P4 (Top of Backswing)
     updateLoadingStep(3);
-    let positions;
+    let initialPositions;
     try {
-      positions = await detectPositionsVisual(frames);
-      console.log('[Analysis] GPT-4o phase detection successful, positions:', positions.length);
+      initialPositions = await detectPositionsVisual(initialFrames);
+      console.log('[Analysis] Initial GPT-4o detection:', initialPositions.map(p => `${p.position}=frame${p.frame_index}`).join(', '));
     } catch(e) {
-      console.warn('[Analysis] GPT-4o detection failed, using fallback:', e.message);
-      positions = generateFallbackPositions(frames.length);
+      console.warn('[Analysis] Initial detection failed:', e.message);
+      initialPositions = generateFallbackPositions(initialFrames.length);
     }
 
-    // Step 4: Select frames, then run MediaPipe on selected frames only (for biomechanics)
+    // Find P4 timestamp — this is our anchor point
+    const p4Pos = initialPositions.find(p => p.position === 'P4');
+    const p4FrameIdx = p4Pos ? Math.min(p4Pos.frame_index, initialFrames.length - 1) : Math.round(initialFrames.length * 0.4);
+    const p4Timestamp = initialFrames[p4FrameIdx].timestamp;
+    const videoDuration = vid.duration;
+    
+    console.log(`[Analysis] P4 anchor: frame${p4FrameIdx}, timestamp=${p4Timestamp.toFixed(3)}s, videoDuration=${videoDuration.toFixed(3)}s`);
+
+    // Phase 2: Dense extraction after P4 (downswing → impact → follow through → finish)
+    const denseStart = Math.max(0, p4Timestamp - 0.1); // slightly before P4
+    const denseEnd = videoDuration;
+    const denseCount = 30; // 30 frames in the fast portion
+    const denseInterval = (denseEnd - denseStart) / (denseCount + 1);
+    
+    const denseFrames = [];
+    for (let i = 1; i <= denseCount; i++) {
+      const t = denseStart + denseInterval * i;
+      try {
+        const frame = await extractFrameAt(vid, t);
+        denseFrames.push(frame);
+      } catch(e) {}
+    }
+    console.log(`[Analysis] Phase 2: Extracted ${denseFrames.length} dense frames from ${denseStart.toFixed(3)}s to ${denseEnd.toFixed(3)}s`);
+
+    // Merge: initial frames (before P4) + dense frames (P4 onward)
+    const preP4Frames = initialFrames.filter(f => f.timestamp < denseStart);
+    const allFrames = [...preP4Frames, ...denseFrames].sort((a, b) => a.timestamp - b.timestamp);
+    
+    allFrames.forEach((f, i) => f._mergedIndex = i);
+    console.log(`[Analysis] Merged: ${allFrames.length} total frames (${preP4Frames.length} pre-P4 + ${denseFrames.length} dense)`);
+
+    // Step 3b: Re-run GPT-4o detection on merged frames for final P1-P8
+    let positions;
+    try {
+      positions = await detectPositionsVisual(allFrames);
+      console.log('[Analysis] Final GPT-4o detection:', positions.map(p => `${p.position}=frame${p.frame_index}`).join(', '));
+    } catch(e) {
+      console.warn('[Analysis] Final detection failed, using fallback:', e.message);
+      positions = generateFallbackPositions(allFrames.length);
+    }
+
+    // Step 4: Select frames, then run MediaPipe on selected frames only
     updateLoadingStep(4);
     const selectedPositions = positions.slice(0, 10);
     const selectedFrames = selectedPositions.map(p => {
-      const idx = Math.min(p.frame_index, frames.length - 1);
-      return { ...frames[idx], right_wrist: null, right_elbow: null, landmarks: null };
+      const idx = Math.min(p.frame_index, allFrames.length - 1);
+      return { ...allFrames[idx], right_wrist: null, right_elbow: null, landmarks: null };
     });
 
     // Re-extract HQ frames
@@ -2679,22 +2723,20 @@ async function startAnalysis() {
       console.log('[Analysis] MediaPipe biomechanics:', validCount, '/', selectedFrames.length, 'frames with pose data');
       mediaPipeSuccess = validCount >= 3;
       
-      // Club head trajectory from all extracted frames (optional, quick run on subset)
+      // Club head trajectory from all extracted frames
       if (mediaPipeSuccess) {
         try {
-          // Run pose on a few more frames around impact for trajectory
           const allPoseData = [];
-          for (let i = 0; i < frames.length; i++) {
-            allPoseData.push({ frameIndex: i, timestamp: frames[i].timestamp, landmarks: null, valid: false });
+          for (let i = 0; i < allFrames.length; i++) {
+            allPoseData.push({ frameIndex: i, timestamp: allFrames[i].timestamp, landmarks: null, valid: false });
           }
-          // Fill in data from selected frames
           selectedPositions.forEach((p, idx) => {
-            const fi = Math.min(p.frame_index, frames.length - 1);
+            const fi = Math.min(p.frame_index, allFrames.length - 1);
             if (selectedFrames[idx].landmarks) {
-              allPoseData[fi] = { frameIndex: fi, timestamp: frames[fi].timestamp, landmarks: selectedFrames[idx].landmarks, valid: true };
+              allPoseData[fi] = { frameIndex: fi, timestamp: allFrames[fi].timestamp, landmarks: selectedFrames[idx].landmarks, valid: true };
             }
           });
-          clubTrajectory = detectClubHeadTrajectory(frames, allPoseData);
+          clubTrajectory = detectClubHeadTrajectory(allFrames, allPoseData);
           console.log('[Analysis] Club trajectory points:', clubTrajectory.length);
         } catch(e) {
           console.warn('[Analysis] Club trajectory failed:', e.message);
