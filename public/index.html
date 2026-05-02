@@ -896,6 +896,10 @@ body {
   padding: 7px 12px;
   background: #1a1a1a;
 }
+.vc-sound-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
 .vc-sound-btn {
   background: none;
   border: none;
@@ -908,13 +912,70 @@ body {
 }
 .vc-sound-btn svg { width: 18px; height: 18px; display: block; }
 .vc-sound-btn:active { opacity: 0.7; }
-.vc-vol-pct {
-  font-size: 11px;
+/* Vertical volume popup */
+.vc-vol-popup {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  border: 1px solid #374151;
+  border-radius: 10px;
+  padding: 12px 8px;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 20;
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.4);
+}
+.vc-vol-popup.show { display: flex; }
+.vc-vol-popup .vc-vol-pct {
+  font-size: 10px;
   color: #e5e7eb;
   font-weight: 600;
-  min-width: 30px;
-  text-align: right;
+}
+.vc-vol-vertical {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 3px;
+  height: 90px;
+  border-radius: 2px;
+  background: #374151;
+  outline: none;
+  cursor: pointer;
+  writing-mode: vertical-lr;
+  direction: rtl;
+}
+.vc-vol-vertical::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  cursor: pointer;
+}
+.vc-vol-vertical::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  cursor: pointer;
+  border: none;
+}
+/* Seek bar (replaces horizontal volume) */
+.vc-seek-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vc-time {
+  font-size: 10px;
+  color: #9ca3af;
+  font-weight: 600;
+  min-width: 28px;
+  text-align: center;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 .vc-slider {
   flex: 1;
@@ -1432,26 +1493,38 @@ body {
       </div>
     </div>
 
-    <!-- Video Controls: volume slider + speed -->
+    <!-- Video Controls: seek bar + sound popup + speed -->
     <div class="video-controls">
-      <button class="vc-sound-btn" id="soundBtn" onclick="toggleMuteBtn()" title="Mute/Unmute">
-        <!-- Speaker icon — SVG so it looks consistent on all devices -->
-        <svg id="iconSoundOn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-        </svg>
-        <svg id="iconSoundOff" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-          style="display:none">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-          <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-        </svg>
-      </button>
-      <span class="vc-vol-pct" id="volPct">20%</span>
-      <input type="range" class="vc-slider" id="volSlider" min="0" max="100" value="20"
-        oninput="setVolume(this.value)">
+      <!-- Sound button with vertical popup -->
+      <div class="vc-sound-wrap" id="soundWrap">
+        <div class="vc-vol-popup" id="volPopup">
+          <span class="vc-vol-pct" id="volPct">20%</span>
+          <input type="range" class="vc-vol-vertical" id="volSlider" min="0" max="100" value="20"
+            oninput="setVolume(this.value)">
+        </div>
+        <button class="vc-sound-btn" id="soundBtn" onclick="toggleVolumePopup()" title="Mute/Unmute">
+          <svg id="iconSoundOn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+          </svg>
+          <svg id="iconSoundOff" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            style="display:none">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+          </svg>
+        </button>
+      </div>
+      <!-- Seek bar -->
+      <div class="vc-seek-wrap">
+        <span class="vc-time" id="vidCurrentTime">0:00</span>
+        <input type="range" class="vc-slider" id="seekSlider" min="0" max="1000" value="0"
+          oninput="seekVideo(this.value)">
+        <span class="vc-time" id="vidDuration">0:00</span>
+      </div>
+      <!-- Speed buttons -->
       <div class="vc-speed-group">
         <button class="vc-speed" onclick="setSpeed(0.25)">25%</button>
         <button class="vc-speed active" onclick="setSpeed(0.50)">50%</button>
@@ -1648,26 +1721,61 @@ function setVolume(val) {
   _syncSoundIcons(v === 0);
 }
 
-function toggleMuteBtn() {
-  const vid = document.getElementById('resultVideo');
-  const slider = document.getElementById('volSlider');
-  const pct = document.getElementById('volPct');
-  if (!vid) return;
-  if (vid.muted || vid.volume === 0) {
-    // Unmute — restore to 20% if was at 0
-    const restore = (slider && parseInt(slider.value) === 0) ? 20 : parseInt(slider?.value || 20);
-    vid.muted = false;
-    vid.volume = restore / 100;
-    if (slider) slider.value = restore;
-    if (pct) pct.textContent = restore + '%';
-    _syncSoundIcons(false);
-  } else {
-    vid.muted = true;
-    if (slider) slider.value = 0;
-    if (pct) pct.textContent = '0%';
-    _syncSoundIcons(true);
-  }
+function toggleVolumePopup() {
+  const popup = document.getElementById('volPopup');
+  if (!popup) return;
+  popup.classList.toggle('show');
 }
+
+// Close volume popup when clicking outside
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('soundWrap');
+  const popup = document.getElementById('volPopup');
+  if (wrap && popup && !wrap.contains(e.target)) {
+    popup.classList.remove('show');
+  }
+});
+
+// ===== SEEK BAR =====
+function formatTime(sec) {
+  if (isNaN(sec) || !isFinite(sec)) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function seekVideo(val) {
+  const vid = document.getElementById('resultVideo');
+  if (!vid || !vid.duration) return;
+  const t = (parseInt(val) / 1000) * vid.duration;
+  vid.currentTime = t;
+  document.getElementById('vidCurrentTime').textContent = formatTime(t);
+}
+
+function initSeekBar() {
+  const vid = document.getElementById('resultVideo');
+  if (!vid) return;
+  
+  vid.addEventListener('loadedmetadata', () => {
+    document.getElementById('vidDuration').textContent = formatTime(vid.duration);
+  });
+  
+  vid.addEventListener('timeupdate', () => {
+    const seek = document.getElementById('seekSlider');
+    const cur = document.getElementById('vidCurrentTime');
+    if (!seek || !vid.duration) return;
+    const pct = (vid.currentTime / vid.duration) * 1000;
+    seek.value = Math.round(pct);
+    if (cur) cur.textContent = formatTime(vid.currentTime);
+  });
+  
+  vid.addEventListener('ended', () => {
+    const seek = document.getElementById('seekSlider');
+    if (seek) seek.value = 1000;
+  });
+}
+
+// Initialize seek bar when video source changes
 
 function setSpeed(rate) {
   const vid = document.getElementById('resultVideo');
@@ -2568,6 +2676,9 @@ function renderResults(data) {
   if (slider) slider.value = 20;
   if (pctEl) pctEl.textContent = '20%';
   _syncSoundIcons(true); // starts muted
+  
+  // Init seek bar
+  initSeekBar();
 
   // P1-P8 Phases Grid
   renderPhasesGrid(data.phases);
