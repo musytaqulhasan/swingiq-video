@@ -2616,96 +2616,92 @@ function generateFallbackPositions(frameCount) {
 
 // ===== AUTO-TRIM: Pixel motion + wrist movement =====
 async function autoTrimSwing(frames) {
+  // === PIXEL MOTION: compare consecutive frames at small resolution ===
+  const W = 160, H = 90;
   const canvas1 = document.createElement('canvas');
   const canvas2 = document.createElement('canvas');
-  const ctx1 = canvas1.getContext('2d', { willReadFrequently: true });
-  const ctx2 = canvas2.getContext('2d', { willReadFrequently: true });
-  // Use small size for fast pixel comparison
-  const W = 160, H = 90;
   canvas1.width = W; canvas1.height = H;
   canvas2.width = W; canvas2.height = H;
+  const ctx1 = canvas1.getContext('2d', { willReadFrequently: true });
+  const ctx2 = canvas2.getContext('2d', { willReadFrequently: true });
   
-  // Compute pixel motion between consecutive frames
-  const pixelMotion = [0];
-  
-  function loadImageToCanvas(base64, ctx, canvas) {
-    return new Promise(resolve => {
+  function loadImg(base64, ctx, cvs) {
+    return new Promise(r => {
       const img = new Image();
-      img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(); };
-      img.onerror = () => resolve();
+      img.onload = () => { ctx.drawImage(img, 0, 0, cvs.width, cvs.height); r(); };
+      img.onerror = () => r();
       img.src = 'data:image/jpeg;base64,' + base64;
     });
   }
   
-  // Load first frame
-  await loadImageToCanvas(frames[0].base64, ctx1, canvas1);
+  const pixelMotion = [0];
+  await loadImg(frames[0].base64, ctx1, canvas1);
   
   for (let i = 1; i < frames.length; i++) {
-    await loadImageToCanvas(frames[i].base64, ctx2, canvas2);
-    
+    await loadImg(frames[i].base64, ctx2, canvas2);
     try {
-      const data1 = ctx1.getImageData(0, 0, W, H).data;
-      const data2 = ctx2.getImageData(0, 0, W, H).data;
-      
-      // Compute grayscale diff
-      let diff = 0, count = 0;
-      for (let p = 0; p < data1.length; p += 4) {
-        const gray1 = (data1[p] + data1[p+1] + data1[p+2]) / 3;
-        const gray2 = (data2[p] + data2[p+1] + data2[p+2]) / 3;
-        diff += Math.abs(gray1 - gray2);
-        count++;
+      const d1 = ctx1.getImageData(0, 0, W, H).data;
+      const d2 = ctx2.getImageData(0, 0, W, H).data;
+      let diff = 0, cnt = 0;
+      for (let p = 0; p < d1.length; p += 4) {
+        const g1 = (d1[p] + d1[p+1] + d1[p+2]) / 3;
+        const g2 = (d2[p] + d2[p+1] + d2[p+2]) / 3;
+        diff += Math.abs(g1 - g2);
+        cnt++;
       }
-      pixelMotion.push(count > 0 ? diff / count : 0);
-    } catch(e) {
-      pixelMotion.push(0);
-    }
-    
-    // Swap: current frame becomes previous
-    const tmpCtx = ctx1; 
+      pixelMotion.push(cnt > 0 ? diff / cnt : 0);
+    } catch(e) { pixelMotion.push(0); }
+    // Copy current to previous
     ctx1.drawImage(canvas2, 0, 0);
   }
   
-  // Smooth pixel motion
-  function smoothArr(arr, window) {
+  // Smooth
+  function smoothArr(arr, w) {
     return arr.map((_, i) => {
       let sum = 0, n = 0;
-      for (let j = i - window; j <= i + window; j++) {
+      for (let j = i - w; j <= i + w; j++) {
         if (j >= 0 && j < arr.length) { sum += arr[j]; n++; }
       }
       return n > 0 ? sum / n : 0;
     });
   }
-  
   const smoothPixel = smoothArr(pixelMotion, 3);
   
-  // Peak-based threshold (robust for videos that start with movement)
+  // === PEAK-BASED THRESHOLD (not baseline) ===
   const maxMotion = Math.max(...smoothPixel);
-  const threshold = maxMotion * 0.20;
+  const threshold = maxMotion * 0.25;
   
-  // Also compute baseline for logging
-  const first10 = smoothPixel.slice(0, Math.min(10, Math.floor(frames.length * 0.2)));
-  const baseline = first10.reduce((a, b) => a + b, 0) / first10.length;
-  
-  // Find start and end
+  // Find start: first frame ABOVE threshold
   let startFrame = 0;
   for (let i = 0; i < smoothPixel.length; i++) {
     if (smoothPixel[i] > threshold) { startFrame = i; break; }
   }
   
+  // Find end: last frame ABOVE threshold
   let endFrame = frames.length - 1;
   for (let i = frames.length - 1; i >= 0; i--) {
     if (smoothPixel[i] > threshold) { endFrame = i; break; }
   }
   
-  // Buffer ±3 frames
+  // Buffer ±3
   startFrame = Math.max(0, startFrame - 3);
   endFrame = Math.min(frames.length - 1, endFrame + 3);
   
-  console.log(`[AutoTrim] Baseline: ${baseline.toFixed(2)}, Threshold: ${threshold.toFixed(2)}, MaxMotion: ${maxMotion.toFixed(2)}`);
-  console.log(`[AutoTrim] PixelMotion sample: ${smoothPixel.slice(0, 15).map(v => v.toFixed(1)).join(', ')}...`);
+  // Safety: minimum swing duration = 0.8s worth of frames
+  const minFrames = Math.max(8, Math.floor(frames.length * 0.15));
+  if (endFrame - startFrame < minFrames) {
+    console.warn('[AutoTrim] Trim too aggressive, expanding');
+    startFrame = Math.max(0, startFrame - 5);
+    endFrame = Math.min(frames.length - 1, endFrame + 5);
+  }
+  
+  console.log(`[AutoTrim] MaxMotion: ${maxMotion.toFixed(2)}, Threshold: ${threshold.toFixed(2)}`);
+  console.log(`[AutoTrim] PixelMotion: ${smoothPixel.map(v => v.toFixed(1)).join(', ')}`);
+  console.log(`[AutoTrim] Result: start=${startFrame}, end=${endFrame} (${endFrame-startFrame+1} frames from ${frames.length})`);
   
   return { startFrame, endFrame };
 }
+
 
 // ===== MAIN ANALYSIS =====
 async function startAnalysis() {
