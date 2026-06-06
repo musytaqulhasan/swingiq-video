@@ -896,10 +896,6 @@ body {
   padding: 7px 12px;
   background: #1a1a1a;
 }
-.vc-sound-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
 .vc-sound-btn {
   background: none;
   border: none;
@@ -912,70 +908,13 @@ body {
 }
 .vc-sound-btn svg { width: 18px; height: 18px; display: block; }
 .vc-sound-btn:active { opacity: 0.7; }
-/* Vertical volume popup */
-.vc-vol-popup {
-  position: absolute;
-  bottom: 36px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #1a1a1a;
-  border: 1px solid #374151;
-  border-radius: 10px;
-  padding: 12px 8px;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  z-index: 20;
-  box-shadow: 0 -4px 12px rgba(0,0,0,0.4);
-}
-.vc-vol-popup.show { display: flex; }
-.vc-vol-popup .vc-vol-pct {
-  font-size: 10px;
+.vc-vol-pct {
+  font-size: 11px;
   color: #e5e7eb;
   font-weight: 600;
-}
-.vc-vol-vertical {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 3px;
-  height: 90px;
-  border-radius: 2px;
-  background: #374151;
-  outline: none;
-  cursor: pointer;
-  writing-mode: vertical-lr;
-  direction: rtl;
-}
-.vc-vol-vertical::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: #e5e7eb;
-  cursor: pointer;
-}
-.vc-vol-vertical::-moz-range-thumb {
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: #e5e7eb;
-  cursor: pointer;
-  border: none;
-}
-/* Seek bar (replaces horizontal volume) */
-.vc-seek-wrap {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.vc-time {
-  font-size: 10px;
-  color: #9ca3af;
-  font-weight: 600;
-  min-width: 28px;
-  text-align: center;
+  min-width: 30px;
+  text-align: right;
   flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
 }
 .vc-slider {
   flex: 1;
@@ -1493,38 +1432,26 @@ body {
       </div>
     </div>
 
-    <!-- Video Controls: seek bar + sound popup + speed -->
+    <!-- Video Controls: volume slider + speed -->
     <div class="video-controls">
-      <!-- Sound button with vertical popup -->
-      <div class="vc-sound-wrap" id="soundWrap">
-        <div class="vc-vol-popup" id="volPopup">
-          <span class="vc-vol-pct" id="volPct">20%</span>
-          <input type="range" class="vc-vol-vertical" id="volSlider" min="0" max="100" value="20"
-            oninput="setVolume(this.value)">
-        </div>
-        <button class="vc-sound-btn" id="soundBtn" onclick="toggleVolumePopup()" title="Mute/Unmute">
-          <svg id="iconSoundOn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-          </svg>
-          <svg id="iconSoundOff" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-            style="display:none">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-            <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
-          </svg>
-        </button>
-      </div>
-      <!-- Seek bar -->
-      <div class="vc-seek-wrap">
-        <span class="vc-time" id="vidCurrentTime">0:00</span>
-        <input type="range" class="vc-slider" id="seekSlider" min="0" max="1000" value="0"
-          oninput="seekVideo(this.value)">
-        <span class="vc-time" id="vidDuration">0:00</span>
-      </div>
-      <!-- Speed buttons -->
+      <button class="vc-sound-btn" id="soundBtn" onclick="toggleMuteBtn()" title="Mute/Unmute">
+        <!-- Speaker icon — SVG so it looks consistent on all devices -->
+        <svg id="iconSoundOn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+        </svg>
+        <svg id="iconSoundOff" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          style="display:none">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+        </svg>
+      </button>
+      <span class="vc-vol-pct" id="volPct">20%</span>
+      <input type="range" class="vc-slider" id="volSlider" min="0" max="100" value="20"
+        oninput="setVolume(this.value)">
       <div class="vc-speed-group">
         <button class="vc-speed" onclick="setSpeed(0.25)">25%</button>
         <button class="vc-speed active" onclick="setSpeed(0.50)">50%</button>
@@ -1696,43 +1623,38 @@ function renderPhasesGrid(phases) {
 function seekVideoToPhase(posId) {
   const vid = document.getElementById('resultVideo');
   if (!vid || !vid.duration) return;
-  
+
+  // Use stored real timestamps from analysis
   const timestamps = window._phaseTimestamps || {};
-  const t = timestamps[posId];
-  
-  let targetTime;
-  if (t !== undefined && t !== null) {
-    targetTime = t;
-  } else {
-    const fallbackRatios = { P1:0.05, P2:0.20, P3:0.35, P4:0.55, P5:0.62, P6:0.68, P7:0.80, P8:0.92 };
-    targetTime = (fallbackRatios[posId] || 0) * vid.duration;
-  }
-  
-  // Highlight card immediately
+  const targetTime = timestamps[posId];
+
+  // Highlight card
   document.querySelectorAll('.phase-card').forEach(c => c.classList.remove('active-phase'));
   const card = document.getElementById('phaseCard_' + posId);
   if (card) card.classList.add('active-phase');
-  
-  // Pause first
+
+  // Seek with frame render guarantee
   vid.pause();
-  
-  // Seek and wait for frame render
   const onSeeked = () => {
     vid.removeEventListener('seeked', onSeeked);
-    
-    // Force frame render
     if ('requestVideoFrameCallback' in vid) {
       vid.requestVideoFrameCallback(() => {
-        console.log(`[Seek] ${posId} → target=${targetTime.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s (rvfc)`);
+        console.log(`[Seek] ${posId} → target=${targetTime?.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s`);
       });
     } else {
-      // Fallback: nudge currentTime to force render
       vid.currentTime = vid.currentTime + 0.00001;
-      console.log(`[Seek] ${posId} → target=${targetTime.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s (nudge)`);
+      console.log(`[Seek] ${posId} → t=${vid.currentTime.toFixed(3)}s`);
     }
   };
   vid.addEventListener('seeked', onSeeked);
-  vid.currentTime = targetTime;
+
+  if (targetTime !== undefined) {
+    vid.currentTime = targetTime;
+  } else {
+    // Fallback
+    const ratios = { P1:0.05, P2:0.20, P3:0.35, P4:0.50, P5:0.58, P6:0.65, P7:0.80, P8:0.92 };
+    vid.currentTime = (ratios[posId] || 0) * vid.duration;
+  }
 }
 
 // ===== VIDEO CONTROLS =====
@@ -1750,61 +1672,26 @@ function setVolume(val) {
   _syncSoundIcons(v === 0);
 }
 
-function toggleVolumePopup() {
-  const popup = document.getElementById('volPopup');
-  if (!popup) return;
-  popup.classList.toggle('show');
-}
-
-// Close volume popup when clicking outside
-document.addEventListener('click', function(e) {
-  const wrap = document.getElementById('soundWrap');
-  const popup = document.getElementById('volPopup');
-  if (wrap && popup && !wrap.contains(e.target)) {
-    popup.classList.remove('show');
-  }
-});
-
-// ===== SEEK BAR =====
-function formatTime(sec) {
-  if (isNaN(sec) || !isFinite(sec)) return '0:00';
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return m + ':' + (s < 10 ? '0' : '') + s;
-}
-
-function seekVideo(val) {
+function toggleMuteBtn() {
   const vid = document.getElementById('resultVideo');
-  if (!vid || !vid.duration) return;
-  const t = (parseInt(val) / 1000) * vid.duration;
-  vid.currentTime = t;
-  document.getElementById('vidCurrentTime').textContent = formatTime(t);
-}
-
-function initSeekBar() {
-  const vid = document.getElementById('resultVideo');
+  const slider = document.getElementById('volSlider');
+  const pct = document.getElementById('volPct');
   if (!vid) return;
-  
-  vid.addEventListener('loadedmetadata', () => {
-    document.getElementById('vidDuration').textContent = formatTime(vid.duration);
-  });
-  
-  vid.addEventListener('timeupdate', () => {
-    const seek = document.getElementById('seekSlider');
-    const cur = document.getElementById('vidCurrentTime');
-    if (!seek || !vid.duration) return;
-    const pct = (vid.currentTime / vid.duration) * 1000;
-    seek.value = Math.round(pct);
-    if (cur) cur.textContent = formatTime(vid.currentTime);
-  });
-  
-  vid.addEventListener('ended', () => {
-    const seek = document.getElementById('seekSlider');
-    if (seek) seek.value = 1000;
-  });
+  if (vid.muted || vid.volume === 0) {
+    // Unmute — restore to 20% if was at 0
+    const restore = (slider && parseInt(slider.value) === 0) ? 20 : parseInt(slider?.value || 20);
+    vid.muted = false;
+    vid.volume = restore / 100;
+    if (slider) slider.value = restore;
+    if (pct) pct.textContent = restore + '%';
+    _syncSoundIcons(false);
+  } else {
+    vid.muted = true;
+    if (slider) slider.value = 0;
+    if (pct) pct.textContent = '0%';
+    _syncSoundIcons(true);
+  }
 }
-
-// Initialize seek bar when video source changes
 
 function setSpeed(rate) {
   const vid = document.getElementById('resultVideo');
@@ -2144,60 +2031,39 @@ async function uploadToCloudinary(file) {
   return data.url;
 }
 
-// ===== MEDIAPIPE POSE INTEGRATION =====
-
+// ===== MEDIAPIPE POSE HELPERS =====
 let poseInstance = null;
 let poseReady = false;
 
 async function initMediaPipePose() {
   if (poseInstance && poseReady) return poseInstance;
-  
   return new Promise((resolve, reject) => {
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`
     });
-    
-    pose.setOptions({
-      modelComplexity: 1,     // 0=lite, 1=full, 2=heavy
-      smoothLandmarks: false,  // no smoothing for static frames
-      enableSegmentation: false,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-    
-    pose.onResults(() => {}); // placeholder, we process inline
-    
+    pose.setOptions({ modelComplexity: 1, smoothLandmarks: false, enableSegmentation: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    pose.onResults(() => {});
     pose.initialize().then(() => {
-      poseInstance = pose;
-      poseReady = true;
+      poseInstance = pose; poseReady = true;
       console.log('[MediaPipe] Pose initialized');
       resolve(pose);
-    }).catch(err => {
-      console.error('[MediaPipe] Init failed:', err);
-      reject(err);
-    });
+    }).catch(reject);
   });
 }
 
-// Process a single base64 frame through MediaPipe Pose
 async function processFrameWithPose(pose, base64, canvas, ctx) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = async () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.width; canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
-      
       let landmarks = null;
       pose.onResults((results) => {
         if (results.poseLandmarks) {
-          landmarks = results.poseLandmarks.map(lm => ({
-            x: lm.x, y: lm.y, z: lm.z, visibility: lm.visibility
-          }));
+          landmarks = results.poseLandmarks.map(lm => ({ x: lm.x, y: lm.y, z: lm.z, visibility: lm.visibility }));
         }
         resolve(landmarks);
       });
-      
       await pose.send({ image: canvas });
     };
     img.onerror = () => resolve(null);
@@ -2205,40 +2071,7 @@ async function processFrameWithPose(pose, base64, canvas, ctx) {
   });
 }
 
-// Run MediaPipe Pose on all frames, return array of pose data
-async function runMediaPipePose(frames, progressCallback) {
-  const pose = await initMediaPipePose();
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  const allPoseData = [];
-  
-  for (let i = 0; i < frames.length; i++) {
-    try {
-      const landmarks = await processFrameWithPose(pose, frames[i].base64, canvas, ctx);
-      allPoseData.push({
-        frameIndex: i,
-        timestamp: frames[i].timestamp,
-        landmarks: landmarks,  // 33 keypoints or null
-        valid: landmarks !== null
-      });
-    } catch(e) {
-      allPoseData.push({ frameIndex: i, timestamp: frames[i].timestamp, landmarks: null, valid: false });
-    }
-    if (progressCallback) progressCallback(i, frames.length);
-  }
-  
-  console.log(`[MediaPipe] Processed ${allPoseData.length} frames, ${allPoseData.filter(p => p.valid).length} valid`);
-  return allPoseData;
-}
-
-// ===== POSE-BASED PHASE DETECTION (P1-P8) =====
-// MediaPipe landmark indices:
-// 11=left_shoulder, 12=right_shoulder, 13=left_elbow, 14=right_elbow
-// 15=left_wrist, 16=right_wrist, 23=left_hip, 24=right_hip
-// 25=left_knee, 26=right_knee, 27=left_ankle, 28=right_ankle
-
 function getAngle(a, b, c) {
-  // Angle at point b (in degrees)
   const ab = { x: a.x - b.x, y: a.y - b.y };
   const cb = { x: c.x - b.x, y: c.y - b.y };
   const dot = ab.x * cb.x + ab.y * cb.y;
@@ -2248,201 +2081,74 @@ function getAngle(a, b, c) {
 
 function extractPoseMetrics(landmarks) {
   if (!landmarks) return null;
-  
-  const lShoulder = landmarks[11];
-  const rShoulder = landmarks[12];
-  const lElbow = landmarks[13];
-  const rElbow = landmarks[14];
-  const lWrist = landmarks[15];
-  const rWrist = landmarks[16];
-  const lHip = landmarks[23];
-  const rHip = landmarks[24];
-  const lKnee = landmarks[25];
-  const rKnee = landmarks[26];
-  
-  // Average wrist height (lower y = higher on screen)
-  const avgWristY = (lWrist.y + rWrist.y) / 2;
-  const avgShoulderY = (lShoulder.y + rShoulder.y) / 2;
-  const avgHipY = (lHip.y + rHip.y) / 2;
-  
-  // Wrist height relative to body (0 = hip level, 1 = above head)
-  const bodyHeight = avgHipY - avgShoulderY + 0.0001;
-  const wristRelHeight = (avgHipY - avgWristY) / bodyHeight;
-  
-  // Wrist horizontal spread (distance between wrists)
-  const wristSpread = Math.abs(rWrist.x - lWrist.x);
-  
-  // Hand position relative to shoulders (center x)
-  const shoulderCenterX = (lShoulder.x + rShoulder.x) / 2;
-  const wristCenterX = (lWrist.x + rWrist.x) / 2;
-  const handsOffsetX = wristCenterX - shoulderCenterX;
-  
-  // Shoulder rotation (difference in z or x)
-  const shoulderTiltX = rShoulder.x - lShoulder.x;
-  
-  // Arm extension: elbow angle
-  const lElbowAngle = getAngle(lShoulder, lElbow, lWrist);
-  const rElbowAngle = getAngle(rShoulder, rElbow, rWrist);
-  
-  // Spine angle: shoulder-hip-knee
-  const spineAngle = getAngle(
-    { x: (lShoulder.x + rShoulder.x)/2, y: (lShoulder.y + rShoulder.y)/2 },
-    { x: (lHip.x + rHip.x)/2, y: (lHip.y + rHip.y)/2 },
-    { x: (lKnee.x + rKnee.x)/2, y: (lKnee.y + rKnee.y)/2 }
+  const lS=landmarks[11],rS=landmarks[12],lE=landmarks[13],rE=landmarks[14];
+  const lW=landmarks[15],rW=landmarks[16],lH=landmarks[23],rH=landmarks[24];
+  const lK=landmarks[25],rK=landmarks[26];
+  const avgWristY=(lW.y+rW.y)/2, avgShoulderY=(lS.y+rS.y)/2, avgHipY=(lH.y+rH.y)/2;
+  const bodyHeight=avgHipY-avgShoulderY+0.0001;
+  const wristRelHeight=(avgHipY-avgWristY)/bodyHeight;
+  const shoulderTiltX=rS.x-lS.x;
+  const lElbowAngle=getAngle(lS,lE,lW);
+  const rElbowAngle=getAngle(rS,rE,rW);
+  const spineAngle=getAngle(
+    {x:(lS.x+rS.x)/2,y:(lS.y+rS.y)/2},
+    {x:(lH.x+rH.x)/2,y:(lH.y+rH.y)/2},
+    {x:(lK.x+rK.x)/2,y:(lK.y+rK.y)/2}
   );
-  
-  // Hip rotation proxy
-  const hipSpread = Math.abs(rHip.x - lHip.x);
-  
-  return {
-    avgWristY, avgShoulderY, avgHipY,
-    wristRelHeight,
-    wristSpread,
-    handsOffsetX,
-    shoulderTiltX,
-    lElbowAngle, rElbowAngle,
-    spineAngle,
-    hipSpread,
-    lWrist, rWrist, lShoulder, rShoulder, lHip, rHip, lElbow, rElbow
-  };
+  const hipSpread=Math.abs(rH.x-lH.x);
+  return { avgWristY, avgShoulderY, avgHipY, wristRelHeight, shoulderTiltX, lElbowAngle, rElbowAngle, spineAngle, hipSpread, lWrist:lW, rWrist:rW, lShoulder:lS, rShoulder:rS, lHip:lH, rHip:rH, lElbow:lE, rElbow:rE };
 }
 
-function detectPhasesFromPose(allPoseData, swingStart, swingEnd) {
-  // This is now called with pre-trimmed data + timing-based phases
-  // Only used for SIGNAL CORRECTION (P4 wristY min, P6 velocity change)
-  const VIS = 0.4, SW = 3, N = allPoseData.length;
-  if (N < 5) return null;
+// ===== VISION-FIRST PHASE DETECTION =====
+// Step 1: Vision AI detects 4 anchor phases (P1, P4, P6, P8)
+// Step 2: Backend interpolates P2, P3, P5, P7
+// Step 3: MediaPipe measures biomechanics on 8 selected frames
 
-  // Extract + interpolate + smooth wristY
-  const raw = allPoseData.map((pd,i) => {
-    if (!pd.valid || !pd.landmarks) return { i, t:pd.timestamp, ok:false };
-    const rW=pd.landmarks[16], lW=pd.landmarks[15];
-    if (rW.visibility<VIS && lW.visibility<VIS) return { i, t:pd.timestamp, ok:false };
-    return { i, t:pd.timestamp, ok:true, wY:(rW.y+lW.y)/2, landmarks:pd.landmarks };
-  });
-  
-  // Interpolate
-  const interp = raw.map((d,i) => {
-    if (d.ok) return {...d};
-    let p=-1,n=-1;
-    for(let j=i-1;j>=0;j--)if(raw[j].ok){p=j;break;}
-    for(let j=i+1;j<N;j++)if(raw[j].ok){n=j;break;}
-    if(p<0||n<0)return{...d};
-    const r=(i-p)/(n-p);
-    return{i,t:d.t,ok:true,wY:raw[p].wY+r*(raw[n].wY-raw[p].wY),landmarks:null};
-  });
-  
-  // Smooth
-  function sm(a,w){return a.map((_,i)=>{const s=Math.max(0,i-Math.floor(w/2)),e=Math.min(a.length,i+Math.floor(w/2)+1);const sl=a.slice(s,e).filter(v=>v!==null);return sl.length?sl.reduce((x,y)=>x+y)/sl.length:null;});}
-  function fill(a){const f=[...a];for(let i=1;i<f.length;i++)if(f[i]===null)f[i]=f[i-1];for(let i=f.length-2;i>=0;i--)if(f[i]===null)f[i]=f[i+1];return f;}
-  
-  const wY = sm(fill(interp.map(d=>d.ok?d.wY:null)), SW);
-  const velY = wY.map((y,i)=>{if(i===0||y===null||wY[i-1]===null)return 0;const dt=interp[i].t-interp[i-1].t;return dt>0?(y-wY[i-1])/dt:0;});
-  const vYs = sm(velY, SW);
-  
-  return { wY, vYs, interp, raw };
-}
-
-// ===== CLUB HEAD TRAJECTORY (Motion Delta) =====
-function detectClubHeadTrajectory(frames, poseData) {
-  // Simple motion-delta approach:
-  // Compare consecutive frames, find the fastest moving region
-  // Focus on area below wrists and away from body (where club head should be)
-  
-  const trajectory = [];
-  
-  for (let i = 1; i < Math.min(frames.length, poseData.length); i++) {
-    if (!poseData[i].valid || !poseData[i-1].valid) continue;
-    
-    const curr = poseData[i].landmarks;
-    const prev = poseData[i-1].landmarks;
-    
-    // Estimate club head position from wrist trajectory + extension
-    // Club head is roughly along the line from elbow through wrist, extended
-    const rWrist = curr[16];
-    const rElbow = curr[14];
-    
-    // Direction vector from elbow to wrist
-    const dx = rWrist.x - rElbow.x;
-    const dy = rWrist.y - rElbow.y;
-    const len = Math.sqrt(dx*dx + dy*dy) + 0.0001;
-    
-    // Extend ~1.5x shaft length beyond wrist
-    const clubHeadX = rWrist.x + (dx / len) * 0.15;
-    const clubHeadY = rWrist.y + (dy / len) * 0.15;
-    
-    // Speed
-    const prevWrist = prev[16];
-    const prevElbow = prev[14];
-    const prevDx = prevWrist.x - prevElbow.x;
-    const prevDy = prevWrist.y - prevElbow.y;
-    const prevLen = Math.sqrt(prevDx*prevDx + prevDy*prevDy) + 0.0001;
-    const prevClubX = prevWrist.x + (prevDx / prevLen) * 0.15;
-    const prevClubY = prevWrist.y + (prevDy / prevLen) * 0.15;
-    
-    const dt = poseData[i].timestamp - poseData[i-1].timestamp;
-    const speed = dt > 0 ? Math.sqrt(
-      Math.pow(clubHeadX - prevClubX, 2) + Math.pow(clubHeadY - prevClubY, 2)
-    ) / dt : 0;
-    
-    trajectory.push({
-      frameIndex: i,
-      timestamp: poseData[i].timestamp,
-      x: clubHeadX,
-      y: clubHeadY,
-      speed: speed
-    });
-  }
-  
-  return trajectory;
-}
-
-
-// ===== DETECT POSITIONS =====
-async function detectPositionsVisual(frames) {
-  // Sample evenly: pick 20 frames from available frames
+async function detectAnchorPhases(frames) {
+  // Sample 20 evenly from 60 frames for Vision AI
   const step = Math.max(1, Math.floor(frames.length / 20));
   const sampled = [];
   for (let i = 0; i < frames.length && sampled.length < 20; i += step) {
     sampled.push({ base64: frames[i].base64, originalIndex: i });
   }
-  
+
   const imageContent = sampled.map((f, idx) => ([
-    { type: 'text', text: `Frame ${idx} (original #${f.originalIndex}):` },
+    { type: 'text', text: `Frame ${f.originalIndex}:` },
     { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
   ])).flat();
 
-  const systemPrompt = `You are an expert golf swing phase detector. The frames are in CHRONOLOGICAL ORDER (frame 0 is earliest, highest number is latest). Your job is to find the best frame for each of the 8 swing phases.
+  const systemPrompt = `You are a golf swing phase detector. You will see frames from a golf swing video in chronological order. Each frame is labeled with its frame number.
 
-CRITICAL RULES:
-1. Frame indices MUST be in strictly ascending order: P1 < P2 < P3 < P4 < P5 < P6 < P7 < P8
-2. P4 (Top) is the MIDPOINT of the swing — roughly 35-45% through the sequence
-3. P5-P6-P7 happen VERY QUICKLY after P4 — typically within 5-8 frames of each other
-4. The swing goes: still → back → UP → DOWN → LOW → UP → still
+You MUST identify exactly 4 key positions:
 
-VISUAL CUES (read carefully):
-- P1 Setup/Address: Golfer standing still over ball. Club on ground behind ball. Body bent forward at hips.
-- P2 Takeaway: Club moved slightly back. Hands moved away from body. Club shaft is between horizontal and 45° back.
-- P3 Backswing: Hands are at shoulder height or above. Club is above the head. Body has rotated AWAY from target (back facing camera in DTL view).
-- P4 Top of Backswing: HIGHEST point of hands/club. Maximum body rotation away from target. Club may point downward behind the golfer.
-- P5 Downswing: Club is coming DOWN from top. Hands are DROPPING. Club is still ABOVE waist height. Body is STARTING to rotate toward target. KEY DIFFERENCE from P7: in P5 the golfer's chest still faces AWAY from target.
-- P6 Impact: Club is at its LOWEST point, near the ground/ball. Arms are extended STRAIGHT DOWN. This is the frame where the club head is closest to the ground. Body is roughly facing the ball.
-- P7 Follow Through: Club has passed the ball and is rising UP on the OTHER SIDE. Arms extend forward toward target. Body continues rotating toward target. KEY DIFFERENCE from P5: in P7 the golfer's chest faces TOWARD the target.
-- P8 Finish: Final balanced pose. Club is wrapped behind the body/head. Body fully faces target. Weight is on front foot.
+P1 (Setup/Address): Golfer standing still over the ball. Club on ground. Body bent forward. This is BEFORE any movement begins.
 
-IMPORTANT: P6 (Impact) is the frame where the CLUB HEAD IS CLOSEST TO THE GROUND. Look for the frame where arms point most downward.
+P4 (Top of Backswing): Hands at the HIGHEST point. Maximum shoulder turn away from target. Club points backward/downward behind the golfer. This is the PEAK of the backswing.
 
-Return ONLY a JSON array:
-[{"position":"P1","name":"Setup/Address","frame_index":<n>},{"position":"P2","name":"Takeaway","frame_index":<n>},{"position":"P3","name":"Backswing","frame_index":<n>},{"position":"P4","name":"Top of Backswing","frame_index":<n>},{"position":"P5","name":"Downswing","frame_index":<n>},{"position":"P6","name":"Impact","frame_index":<n>},{"position":"P7","name":"Follow Through","frame_index":<n>},{"position":"P8","name":"Finish","frame_index":<n>}]`;
+P6 (Impact): Club is at its LOWEST point, at or near the ball. Arms extended STRAIGHT DOWN. This is the moment of ball contact. The club head is near the ground.
+
+P8 (Finish): Final balanced pose. Club wrapped behind body/head. Body fully faces target. Weight on front foot. This is AFTER the swing is complete.
+
+RULES:
+- Frame numbers MUST be in ascending order: P1 < P4 < P6 < P8
+- P1 is usually in the first 15% of frames
+- P4 is usually around 35-50% of frames
+- P6 is usually around 55-70% of frames (very close after P4, downswing is fast)
+- P8 is usually in the last 15% of frames
+- Use the frame numbers shown in the labels, not array indices
+
+Return ONLY a JSON object (no markdown, no explanation):
+{"P1":<frame_number>,"P4":<frame_number>,"P6":<frame_number>,"P8":<frame_number>}`;
 
   const payload = {
     service: 'chat',
     payload: {
       model: 'gpt-4o',
-      max_tokens: 500,
+      max_tokens: 200,
+      temperature: 0.3,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: [...imageContent, { type: 'text', text: 'Identify the frame_index (use the original frame numbers shown) for each P1-P8 position. Return only the JSON array.' }] }
+        { role: 'user', content: [...imageContent, { type: 'text', text: 'Identify P1, P4, P6, P8 frame numbers. Return only JSON.' }] }
       ]
     }
   };
@@ -2453,154 +2159,250 @@ Return ONLY a JSON array:
     body: JSON.stringify(payload)
   });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message || 'Detection failed');
+  if (data.error) throw new Error(data.error?.message || 'Anchor detection failed');
 
-  let raw = data.choices[0].message.content;
-  raw = raw.replace(/```json|```/g, '').trim();
-  console.log('[GPT-4o Detection] Raw:', raw.substring(0, 300));
-  
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (match) {
-    try {
-      const positions = JSON.parse(match[0]);
-      if (Array.isArray(positions) && positions.length >= 8) {
-        console.log('[GPT-4o Detection] Positions:', positions.map(p => `${p.position}=frame${p.frame_index}`).join(', '));
-        return positions.slice(0, 10);
-      }
-    } catch(e) {
-      console.warn('[GPT-4o Detection] JSON parse failed:', e.message);
-    }
+  let raw = data.choices[0].message.content.trim().replace(/```json|```/g, '').trim();
+  console.log('[Anchors] Vision AI raw:', raw);
+
+  // Parse JSON
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('Vision AI did not return valid JSON');
+
+  let anchors;
+  try {
+    anchors = JSON.parse(match[0]);
+  } catch(e) {
+    // Sanitize and retry
+    let sanitized = match[0].replace(/,\s*([}\]])/g, '$1').replace(/(\{|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+    anchors = JSON.parse(sanitized);
   }
-  // Fallback positions
-  console.warn('[GPT-4o Detection] Falling back to timing-based positions');
-  return generateFallbackPositions(frames.length);
+
+  // Validate
+  const p1 = anchors.P1, p4 = anchors.P4, p6 = anchors.P6, p8 = anchors.P8;
+  if (p1 == null || p4 == null || p6 == null || p8 == null) throw new Error('Missing anchor phases');
+  if (!(p1 < p4 && p4 < p6 && p6 < p8)) throw new Error(`Anchors not ascending: P1=${p1}, P4=${p4}, P6=${p6}, P8=${p8}`);
+
+  console.log(`[Anchors] Detected: P1=${p1}, P4=${p4}, P6=${p6}, P8=${p8}`);
+  return { P1: p1, P4: p4, P6: p6, P8: p8 };
 }
 
-function generateFallbackPositions(frameCount) {
-  const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Pre-Impact','Impact','Follow Through','Extension','Finish'];
-  const timing = [0, 0.08, 0.2, 0.35, 0.45, 0.55, 0.6, 0.72, 0.85, 1.0];
-  return timing.slice(0, 10).map((t, i) => ({
+// ===== GEOMETRY-BASED PHASE DETECTION (P2, P3, P5, P7) =====
+
+// Lead Arm Angle: Left shoulder → Left wrist vector angle to horizontal
+// For right-handed golfer: landmarks[11]=left_shoulder, [15]=left_wrist
+function computeLeadArmAngle(landmarks) {
+  if (!landmarks) return null;
+  const lShoulder = landmarks[11];
+  const lWrist = landmarks[15];
+  if (!lShoulder || !lWrist || lShoulder.visibility < 0.3 || lWrist.visibility < 0.3) return null;
+  
+  const dx = lWrist.x - lShoulder.x;
+  const dy = lWrist.y - lShoulder.y;
+  // Angle to horizontal (0° = perfectly horizontal)
+  const angleRad = Math.atan2(dy, dx);
+  const angleDeg = angleRad * 180 / Math.PI;
+  // We want angle deviation from horizontal (0°)
+  return angleDeg;
+}
+
+// Shaft Angle: Grip point → Club head, angle to horizontal
+// Grip = average of wrists, Club head = extrapolated from elbow→wrist direction
+function computeShaftAngle(landmarks) {
+  if (!landmarks) return null;
+  const rWrist = landmarks[16], lWrist = landmarks[15];
+  const rElbow = landmarks[14], lElbow = landmarks[13];
+  if (!rWrist || !lWrist || !rElbow) return null;
+  if (rWrist.visibility < 0.3 || lWrist.visibility < 0.3) return null;
+  
+  // Grip point = midpoint of wrists
+  const gripX = (rWrist.x + lWrist.x) / 2;
+  const gripY = (rWrist.y + lWrist.y) / 2;
+  
+  // Club head = extrapolate from right elbow→right wrist direction
+  const dx = rWrist.x - rElbow.x;
+  const dy = rWrist.y - rElbow.y;
+  const len = Math.sqrt(dx*dx + dy*dy) + 0.0001;
+  const clubHeadX = rWrist.x + (dx / len) * 0.12;
+  const clubHeadY = rWrist.y + (dy / len) * 0.12;
+  
+  // Angle of grip→clubhead to horizontal
+  const shaftDx = clubHeadX - gripX;
+  const shaftDy = clubHeadY - gripY;
+  const angleDeg = Math.atan2(shaftDy, shaftDx) * 180 / Math.PI;
+  return angleDeg;
+}
+
+// Find frame in range where angle function returns value closest to horizontal (0° or 180°)
+function findClosestToHorizontal(poseResults, startIdx, endIdx, angleFn) {
+  let bestIdx = -1;
+  let bestDeviation = Infinity;
+  
+  for (let i = startIdx; i <= endIdx; i++) {
+    if (!poseResults[i]) continue;
+    const angle = angleFn(poseResults[i]);
+    if (angle === null) continue;
+    
+    // Deviation from horizontal: min of |angle|, |angle-180|, |angle+180|
+    const dev = Math.min(Math.abs(angle), Math.abs(angle - 180), Math.abs(angle + 180));
+    
+    if (dev < bestDeviation) {
+      bestDeviation = dev;
+      bestIdx = i;
+    }
+  }
+  
+  return { frameIndex: bestIdx, deviation: bestDeviation };
+}
+
+// Run MediaPipe on frames in specific ranges, return landmarks per frame index
+async function runMediaPipeOnRange(frames, startIdx, endIdx) {
+  const pose = await initMediaPipePose();
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  const results = {};
+  
+  for (let i = startIdx; i <= endIdx && i < frames.length; i++) {
+    try {
+      const landmarks = await processFrameWithPose(pose, frames[i].base64, canvas, ctx);
+      if (landmarks) results[i] = landmarks;
+    } catch(e) {}
+  }
+  
+  return results;
+}
+
+// Detect P2, P3, P5, P7 using MediaPipe geometry
+async function detectGeometryPhases(frames, anchors, viewAngle, progressCallback) {
+  const { P1, P4, P6, P8 } = anchors;
+  const isFaceOn = viewAngle === 'face-on';
+  const isDTL = viewAngle === 'dtl';
+  
+  console.log(`[Geometry] View: ${viewAngle}, Anchors: P1=${P1}, P4=${P4}, P6=${P6}, P8=${P8}`);
+  
+  // Run MediaPipe on all search windows:
+  // P2/P3 search: P1 → P4
+  // P5 search: P4 → P6
+  // P7 search: P6 → P8 (Face On only, DTL uses interpolation)
+  const searchStart = P1;
+  const searchEnd = isFaceOn ? P8 : P6;
+  
+  console.log(`[Geometry] Running MediaPipe on frames ${searchStart}→${Math.min(searchEnd, P8)}...`);
+  const poseResults = await runMediaPipeOnRange(frames, searchStart, Math.min(P8, frames.length - 1));
+  const validCount = Object.keys(poseResults).length;
+  console.log(`[Geometry] MediaPipe valid: ${validCount} frames`);
+  
+  if (progressCallback) progressCallback(50);
+  
+  // === P2: Shaft Parallel to Ground (before P4) ===
+  let P2;
+  const p2Result = findClosestToHorizontal(poseResults, P1 + 1, P4 - 1, computeShaftAngle);
+  if (p2Result.frameIndex >= 0 && p2Result.deviation < 45) {
+    P2 = p2Result.frameIndex;
+    console.log(`[Geometry] P2 (Shaft Parallel): frame ${P2} (dev=${p2Result.deviation.toFixed(1)}°)`);
+  } else {
+    P2 = P1 + Math.round(0.35 * (P4 - P1));
+    console.log(`[Geometry] P2 fallback (interpolated): frame ${P2}`);
+  }
+  
+  // === P3: Lead Arm Parallel to Ground (before P4) ===
+  let P3;
+  const p3Result = findClosestToHorizontal(poseResults, Math.max(P2 + 1, P1 + 2), P4 - 1, computeLeadArmAngle);
+  if (p3Result.frameIndex >= 0 && p3Result.deviation < 45) {
+    P3 = p3Result.frameIndex;
+    console.log(`[Geometry] P3 (Lead Arm Parallel): frame ${P3} (dev=${p3Result.deviation.toFixed(1)}°)`);
+  } else {
+    P3 = P1 + Math.round(0.70 * (P4 - P1));
+    console.log(`[Geometry] P3 fallback (interpolated): frame ${P3}`);
+  }
+  
+  // === P5: Lead Arm Parallel to Ground (after P4, before P6) ===
+  let P5;
+  if (P6 - P4 >= 3) {
+    const p5Result = findClosestToHorizontal(poseResults, P4 + 1, P6 - 1, computeLeadArmAngle);
+    if (p5Result.frameIndex >= 0 && p5Result.deviation < 45) {
+      P5 = p5Result.frameIndex;
+      console.log(`[Geometry] P5 (Lead Arm Parallel): frame ${P5} (dev=${p5Result.deviation.toFixed(1)}°)`);
+    } else {
+      P5 = P4 + Math.round(0.50 * (P6 - P4));
+      console.log(`[Geometry] P5 fallback (interpolated): frame ${P5}`);
+    }
+  } else {
+    P5 = P4 + Math.round(0.50 * (P6 - P4));
+    console.log(`[Geometry] P5 (gap too small, interpolated): frame ${P5}`);
+  }
+  
+  // === P7: View-specific ===
+  let P7;
+  if (isFaceOn && P8 - P6 >= 3) {
+    // Face On: Lead Arm Parallel to Ground (after P6, before P8)
+    const p7FO = await runMediaPipeOnRange(frames, P6 + 1, P8 - 1);
+    Object.assign(poseResults, p7FO);
+    
+    const p7Result = findClosestToHorizontal(poseResults, P6 + 1, P8 - 1, computeLeadArmAngle);
+    if (p7Result.frameIndex >= 0 && p7Result.deviation < 45) {
+      P7 = p7Result.frameIndex;
+      console.log(`[Geometry] P7 Face On (Lead Arm Parallel): frame ${P7} (dev=${p7Result.deviation.toFixed(1)}°)`);
+    } else {
+      P7 = P6 + Math.round(0.40 * (P8 - P6));
+      console.log(`[Geometry] P7 Face On fallback: frame ${P7}`);
+    }
+  } else {
+    // DTL: Interpolation (lead arm detection unstable in DTL perspective)
+    P7 = P6 + Math.round(0.40 * (P8 - P6));
+    console.log(`[Geometry] P7 DTL (interpolated): frame ${P7}`);
+  }
+  
+  if (progressCallback) progressCallback(80);
+  
+  // Build all 8 phases
+  const maxIdx = frames.length - 1;
+  const all = [P1, P2, P3, P4, P5, P6, P7, P8].map(v => Math.max(0, Math.min(v, maxIdx)));
+  
+  // Ensure strictly increasing
+  for (let i = 1; i < all.length; i++) {
+    if (all[i] <= all[i - 1]) all[i] = Math.min(all[i - 1] + 1, maxIdx);
+  }
+  
+  const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
+  const result = all.map((fi, i) => ({
     position: `P${i+1}`,
     name: names[i],
-    frame_index: Math.round(t * (frameCount - 1))
+    frame_index: fi,
+    timestamp: frames[fi].timestamp
+  }));
+  
+  console.log(`[Geometry] FINAL: ${result.map(p => `${p.position}=f${p.frame_index}(t=${p.timestamp.toFixed(2)})`).join(', ')}`);
+  return { phases: result, poseResults };
+}
+
+// Fallback if everything fails
+function generateFallbackPhases(frameCount) {
+  const ratios = [0.05, 0.20, 0.35, 0.50, 0.58, 0.65, 0.80, 0.92];
+  const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
+  return ratios.map((r, i) => ({
+    position: `P${i+1}`,
+    name: names[i],
+    frame_index: Math.round(r * (frameCount - 1))
   }));
 }
 
-// ===== AUTO-TRIM: Pixel motion + wrist movement =====
-// ===== HYBRID SWING DETECTION SYSTEM =====
-
-async function autoTrimSwing(frames) {
-  const N = frames.length;
-  const W=160, H=90;
-  const c1=document.createElement('canvas'), c2=document.createElement('canvas');
-  c1.width=W;c1.height=H;c2.width=W;c2.height=H;
-  const x1=c1.getContext('2d',{willReadFrequently:true}), x2=c2.getContext('2d',{willReadFrequently:true});
-
-  function loadImg(b64,ctx,cvs){return new Promise(r=>{const img=new Image();img.onload=()=>{ctx.drawImage(img,0,0,cvs.width,cvs.height);r();};img.onerror=()=>r();img.src='data:image/jpeg;base64,'+b64;});}
-
-  // Compute pixel motion
-  const motion=[0];
-  await loadImg(frames[0].base64,x1,c1);
-  for(let i=1;i<N;i++){
-    await loadImg(frames[i].base64,x2,c2);
-    try{
-      const d1=x1.getImageData(0,0,W,H).data, d2=x2.getImageData(0,0,W,H).data;
-      let diff=0,cnt=0;
-      for(let p=0;p<d1.length;p+=4){diff+=Math.abs((d1[p]+d1[p+1]+d1[p+2])/3-(d2[p]+d2[p+1]+d2[p+2])/3);cnt++;}
-      motion.push(cnt>0?diff/cnt:0);
-    }catch(e){motion.push(0);}
-    x1.drawImage(c2,0,0);
-  }
-
-  // Smooth (window 5)
-  function sm(a){return a.map((_,i)=>{let s=0,n=0;for(let j=i-2;j<=i+2;j++)if(j>=0&&j<a.length){s+=a[j];n++;}return n>0?s/n:0;});}
-  const smoothed=sm(motion);
-
-  // Normalize
-  const mean=smoothed.reduce((a,b)=>a+b,0)/N;
-  const normalized=smoothed.map(v=>v-mean);
-
-  // Ignore 20% awal dan 10% akhir — only search in 20%-90% range
-  const searchStart=Math.floor(N*0.20);
-  const searchEnd=Math.floor(N*0.90);
-
-  // Find LOCAL peaks in search range (not global max)
-  const peaks=[];
-  for(let i=searchStart+1;i<searchEnd-1;i++){
-    if(normalized[i]>normalized[i-1] && normalized[i]>normalized[i+1] && normalized[i]>0){
-      peaks.push({idx:i, val:normalized[i]});
+// Extract biomechanics from already-computed pose results for 8 phase frames
+function extractBiomechanicsFromPose(poseResults, phases) {
+  const bio = {};
+  for (const phase of phases) {
+    const landmarks = poseResults[phase.frame_index];
+    if (landmarks) {
+      bio[phase.position] = {
+        right_wrist: { x: landmarks[16].x, y: landmarks[16].y },
+        right_elbow: { x: landmarks[14].x, y: landmarks[14].y },
+        landmarks: landmarks,
+        metrics: extractPoseMetrics(landmarks)
+      };
     }
   }
-
-  // Sort by value descending, pick highest local peak
-  peaks.sort((a,b)=>b.val-a.val);
-  let peakIdx;
-  if(peaks.length>0){
-    peakIdx=peaks[0].idx;
-  } else {
-    // Fallback: center of video
-    peakIdx=Math.floor(N/2);
-    console.warn('[AutoTrim] No valid peak found, using center');
-  }
-
-  // Threshold = 50% of peak value
-  const peakVal=normalized[peakIdx];
-  const threshold=peakVal*0.5;
-
-  // Expand from peak to left
-  let startFrame=peakIdx;
-  for(let i=peakIdx-1;i>=0;i--){
-    if(normalized[i]<threshold){startFrame=i+1;break;}
-    if(i===0)startFrame=0;
-  }
-
-  // Expand from peak to right
-  let endFrame=peakIdx;
-  for(let i=peakIdx+1;i<N;i++){
-    if(normalized[i]<threshold){endFrame=i-1;break;}
-    if(i===N-1)endFrame=N-1;
-  }
-
-  // Buffer ±10
-  startFrame=Math.max(0,startFrame-10);
-  endFrame=Math.min(N-1,endFrame+10);
-
-  // Fallback: if trim < 20% of video, use 25-75%
-  if((endFrame-startFrame)<N*0.2){
-    console.warn('[AutoTrim] Trim too small, using 25-75% fallback');
-    startFrame=Math.floor(N*0.25);
-    endFrame=Math.floor(N*0.75);
-  }
-
-  console.log(`[AutoTrim] Mean:${mean.toFixed(2)}, Peak:${peakVal.toFixed(2)}@f${peakIdx}, Thresh:${threshold.toFixed(2)}`);
-  console.log(`[AutoTrim] Peaks found: ${peaks.slice(0,5).map(p=>`f${p.idx}(${p.val.toFixed(1)})`).join(', ')}`);
-  console.log(`[AutoTrim] Motion: ${smoothed.map(v=>v.toFixed(1)).join(',')}`);
-  console.log(`[AutoTrim] Normalized: ${normalized.map(v=>v.toFixed(1)).join(',')}`);
-  console.log(`[AutoTrim] Result: start=${startFrame}, end=${endFrame}, peak=${peakIdx} (${endFrame-startFrame+1} of ${N} frames)`);
-
-  return { startFrame, endFrame, peakIndex: peakIdx };
+  console.log(`[Biomechanics] Extracted for ${Object.keys(bio).length}/8 phases`);
+  return bio;
 }
-
-
-function detectSwingPhases(trimmedFrames, poseData) {
-  const N = trimmedFrames.length;
-  const phaseNames = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
-  const ratios = [0.05, 0.20, 0.35, 0.55, 0.62, 0.68, 0.80, 0.92];
-  const idx = ratios.map(r => Math.min(Math.round(r * (N-1)), N-1));
-
-  // Ensure strictly increasing
-  for (let i=1; i<idx.length; i++) {
-    if (idx[i]<=idx[i-1]) idx[i]=Math.min(idx[i-1]+1, N-1);
-  }
-
-  console.log(`[Phases] Time-normalized: ${idx.map((fi,i)=>`P${i+1}=f${fi}(t=${trimmedFrames[fi].timestamp.toFixed(2)})`).join(', ')}`);
-
-  return idx.map((fi,i) => ({
-    position:`P${i+1}`, name:phaseNames[i], frame_index:fi,
-    timestamp:trimmedFrames[fi].timestamp, metrics:null, landmarks:null, wristSpeed:0
-  }));
-}
-
 
 // ===== MAIN ANALYSIS =====
 async function startAnalysis() {
@@ -2637,86 +2439,91 @@ async function startAnalysis() {
       setTimeout(resolve, 10000);
     });
 
-    // === FRAME EXTRACTION (50 frames for dense coverage) ===
-    const allExtracted = await extractFrames(vid, 50);
-    console.log('[Analysis] Extracted', allExtracted.length, 'frames');
+    const frames = await extractFrames(vid, 60);
+    console.log(`[Analysis] Extracted ${frames.length} frames from ${vid.duration.toFixed(2)}s video`);
 
-    // === AUTO-TRIM: Detect swing boundaries using pixel motion ===
+    // Step 3: Vision AI → detect 4 anchor phases (P1, P4, P6, P8)
     updateLoadingStep(3);
-    const trimResult = await autoTrimSwing(allExtracted);
-    console.log(`[AutoTrim] Start: frame ${trimResult.startFrame}(t=${allExtracted[trimResult.startFrame].timestamp.toFixed(2)}), End: frame ${trimResult.endFrame}(t=${allExtracted[trimResult.endFrame].timestamp.toFixed(2)})`);
-    
-    // Trim frames to swing only
-    const frames = allExtracted.slice(trimResult.startFrame, trimResult.endFrame + 1);
-    console.log(`[AutoTrim] Trimmed: ${frames.length} frames (from ${allExtracted.length})`);
-
-    // Step 3: MediaPipe Pose on trimmed frames → hybrid phase detection
     let positions;
-    let poseData = [];
-    let mediaPipeSuccess = false;
-    let clubTrajectory = [];
-    let poseSignals = null;
-
+    let anchors;
+    let poseResults = {};
     try {
-      poseData = await runMediaPipePose(frames, (i, total) => {
-        pctEl.textContent = (30 + Math.round((i / total) * 40)) + '%';
-      });
-
-      // Get pose signals for correction
-      poseSignals = detectPhasesFromPose(poseData);
-      mediaPipeSuccess = poseSignals !== null;
-      console.log('[Analysis] MediaPipe signals:', mediaPipeSuccess ? 'available' : 'unavailable');
+      anchors = await detectAnchorPhases(frames);
       
-      try {
-        clubTrajectory = detectClubHeadTrajectory(frames, poseData);
-        console.log('[Analysis] Club trajectory points:', clubTrajectory.length);
-      } catch(e) {
-        console.warn('[Analysis] Club trajectory failed:', e.message);
-      }
+      // Step 3b: MediaPipe geometry → detect P2, P3, P5, P7
+      const geoResult = await detectGeometryPhases(frames, anchors, selectedView, (pct) => {
+        pctEl.textContent = (50 + Math.round(pct * 0.2)) + '%';
+      });
+      positions = geoResult.phases;
+      poseResults = geoResult.poseResults;
+      console.log('[Analysis] Vision + Geometry detection successful');
     } catch(e) {
-      console.warn('[Analysis] MediaPipe failed:', e.message);
+      console.warn('[Analysis] Detection failed, using fallback:', e.message);
+      positions = generateFallbackPhases(frames.length);
     }
 
-    // Hybrid phase detection: timing-based + signal correction
-    positions = detectSwingPhases(frames, poseSignals);
-    console.log('[Analysis] Hybrid detection complete');
+    // Store timestamps for video seek
+    window._phaseTimestamps = {};
+    positions.forEach(p => {
+      window._phaseTimestamps[p.position] = p.timestamp || frames[Math.min(p.frame_index, frames.length-1)].timestamp;
+    });
+    console.log('[Phases] Timestamps stored:', window._phaseTimestamps);
 
-    // Step 4: Select best frames & enrich with MediaPipe data
+    // Step 4: Re-extract HQ frames + extract biomechanics
     updateLoadingStep(4);
-    const selectedPositions = positions;
-    const selectedFrames = selectedPositions.map((p, idx) => {
-      const fi = Math.min(p.frame_index, frames.length - 1);
-      const pd = poseData[fi];
-      return {
-        ...frames[fi],
-        right_wrist: (pd && pd.valid) ? { x: pd.landmarks[16].x, y: pd.landmarks[16].y } : null,
-        right_elbow: (pd && pd.valid) ? { x: pd.landmarks[14].x, y: pd.landmarks[14].y } : null,
-        landmarks: (pd && pd.valid) ? pd.landmarks : null
-      };
+    const selectedFrames = positions.slice(0, 8).map(p => {
+      const idx = Math.min(p.frame_index, frames.length - 1);
+      return { ...frames[idx], right_wrist: null, right_elbow: null, landmarks: null };
     });
 
-    // Re-extract HQ frames
+    // Re-extract HQ frames at exact timestamps
     for (let i = 0; i < selectedFrames.length; i++) {
       try {
         const hq = await extractFrameAt(vid, selectedFrames[i].timestamp);
         selectedFrames[i].base64 = hq.base64;
       } catch(e) {}
+      pctEl.textContent = (75 + Math.round((i / selectedFrames.length) * 10)) + '%';
     }
 
-    // Prepare positions for API
-    const positionsForApi = selectedPositions.map(p => ({
+    // Run MediaPipe on any phase frames not yet measured (P4, P6, P8 from Vision AI)
+    try {
+      const pose = await initMediaPipePose();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      for (const phase of positions) {
+        if (!poseResults[phase.frame_index]) {
+          try {
+            const lm = await processFrameWithPose(pose, frames[Math.min(phase.frame_index, frames.length-1)].base64, canvas, ctx);
+            if (lm) poseResults[phase.frame_index] = lm;
+          } catch(e) {}
+        }
+      }
+    } catch(e) {}
+
+    // Extract biomechanics from pose results
+    const biomechanics = extractBiomechanicsFromPose(poseResults, positions);
+    
+    // Enrich selected frames with pose data
+    positions.slice(0, 8).forEach((p, i) => {
+      const bio = biomechanics[p.position];
+      if (bio) {
+        selectedFrames[i].right_wrist = bio.right_wrist;
+        selectedFrames[i].right_elbow = bio.right_elbow;
+      }
+    });
+
+    // Prepare positions with metrics for API
+    const positionsForApi = positions.slice(0, 8).map(p => ({
       position: p.position,
       name: p.name,
       frame_index: p.frame_index,
-      wristSpeed: p.wristSpeed || null,
-      metrics: p.metrics ? {
-        wristRelHeight: p.metrics.wristRelHeight,
-        spineAngle: p.metrics.spineAngle,
-        shoulderTiltX: p.metrics.shoulderTiltX,
-        hipSpread: p.metrics.hipSpread,
-        lElbowAngle: p.metrics.lElbowAngle,
-        rElbowAngle: p.metrics.rElbowAngle,
-        handsOffsetX: p.metrics.handsOffsetX
+      metrics: biomechanics[p.position]?.metrics ? {
+        wristRelHeight: biomechanics[p.position].metrics.wristRelHeight,
+        spineAngle: biomechanics[p.position].metrics.spineAngle,
+        shoulderTiltX: biomechanics[p.position].metrics.shoulderTiltX,
+        hipSpread: biomechanics[p.position].metrics.hipSpread,
+        lElbowAngle: biomechanics[p.position].metrics.lElbowAngle,
+        rElbowAngle: biomechanics[p.position].metrics.rElbowAngle
       } : null
     }));
 
@@ -2733,9 +2540,7 @@ async function startAnalysis() {
         })),
         positions: positionsForApi,
         viewAngle: selectedView,
-        club: selectedClub,
-        mediaPipeDetected: mediaPipeSuccess,
-        clubTrajectory: clubTrajectory.length > 0 ? clubTrajectory : null
+        club: selectedClub
       })
     });
 
@@ -2750,13 +2555,6 @@ async function startAnalysis() {
     clearInterval(interval);
     pctEl.textContent = '100%';
     analysisData = analyzeData.result;
-    
-    // Store phase timestamps for accurate video seeking
-    window._phaseTimestamps = {};
-    selectedPositions.forEach(p => {
-      window._phaseTimestamps[p.position] = p.timestamp;
-    });
-    console.log('[Phases] Stored timestamps:', window._phaseTimestamps);
 
     setTimeout(() => {
       renderResults(analysisData);
@@ -2821,9 +2619,6 @@ function renderResults(data) {
   if (slider) slider.value = 20;
   if (pctEl) pctEl.textContent = '20%';
   _syncSoundIcons(true); // starts muted
-  
-  // Init seek bar
-  initSeekBar();
 
   // P1-P8 Phases Grid
   renderPhasesGrid(data.phases);
