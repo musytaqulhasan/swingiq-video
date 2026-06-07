@@ -2112,6 +2112,10 @@ async function detectAnchorPhases(frames) {
     sampled.push({ base64: frames[i].base64, originalIndex: i });
   }
 
+  console.log(`[Pass1] Total frames: ${frames.length}, Step: ${step}, Sampled: ${sampled.length}`);
+  console.log(`[Pass1] Frame indices sent: [${sampled.map(s => s.originalIndex).join(', ')}]`);
+  console.log(`[Pass1] Timestamps sent: [${sampled.map(s => frames[s.originalIndex].timestamp.toFixed(3)).join(', ')}]`);
+
   const imgContent = sampled.map(f => ([
     { type: 'text', text: `Frame ${f.originalIndex}:` },
     { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
@@ -2170,6 +2174,9 @@ async function detectImpactPass2(frames, p4Frame) {
   const wFrames = [];
   for (let i = wStart; i <= wEnd; i++) wFrames.push({ base64: frames[i].base64, originalIndex: i });
   if (wFrames.length < 3) return Math.round((wStart + wEnd) / 2);
+
+  console.log(`[Pass2] Frames sent: [${wFrames.map(f => f.originalIndex).join(', ')}]`);
+  console.log(`[Pass2] Timestamps sent: [${wFrames.map(f => frames[f.originalIndex].timestamp.toFixed(3)).join(', ')}]`);
 
   const imgC = wFrames.map(f => ([
     { type: 'text', text: `Frame ${f.originalIndex}:` },
@@ -2479,6 +2486,7 @@ async function startAnalysis() {
 
     const frames = await extractFrames(vid, 90);
     console.log(`[Analysis] Extracted ${frames.length} frames from ${vid.duration.toFixed(2)}s video`);
+    console.log(`[Analysis] Frame timestamps: [${frames.map(f => f.timestamp.toFixed(3)).join(', ')}]`);
 
     // Step 3: Vision AI → detect 4 anchor phases (P1, P4, P8) + focused P6
     updateLoadingStep(3);
