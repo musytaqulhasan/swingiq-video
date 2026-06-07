@@ -2176,22 +2176,31 @@ async function detectImpactPass2(frames, p4Frame) {
     { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
   ])).flat();
 
-  const p2Prompt = `You are a golf impact detector. These frames show downswing through impact.
+  const p2Prompt = `You are a golf impact detector. These frames show the downswing through impact.
 
-Impact = EXACT moment club hits ball. It is a TRANSITION, not a pose.
+Impact = the EXACT moment the clubhead contacts the ball. It is a TRANSITION, not a pose.
 
-Find TWO frames:
-1. preImpact: LAST frame BEFORE club hits ball (club approaching, arms down)
-2. postImpact: FIRST frame AFTER club hits ball (club passed ball, arms extending)
+Identify THREE frames:
+1. lastPreImpact: clubhead is clearly BEFORE the ball, still approaching
+2. impactCandidate: clubhead is CLOSEST to the ball, the most likely moment of contact
+3. firstPostImpact: clubhead has clearly PASSED the ball
 
-They should be 1-3 frames apart. Return ONLY: {"preImpact":<frame>,"postImpact":<frame>}`;
+CRITICAL RULES:
+- impactCandidate should be the frame where the clubhead is closest to the ball IMMEDIATELY BEFORE separation occurs
+- Do NOT pick a frame where the clubhead has already passed the ball
+- Do NOT pick a frame where the body is already releasing into follow-through
+- If uncertain between two adjacent frames: CHOOSE THE EARLIER FRAME
+- Impact should be slightly EARLIER rather than slightly LATER
+- lastPreImpact < impactCandidate < firstPostImpact
+
+Return ONLY: {"lastPreImpact":<frame>,"impactCandidate":<frame>,"firstPostImpact":<frame>}`;
 
   const res2 = await fetch(PROXY, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ service: 'chat', payload: {
-      model: 'gpt-4o', max_tokens: 100, temperature: 0.2,
+      model: 'gpt-4o', max_tokens: 120, temperature: 0.2,
       messages: [{ role: 'system', content: p2Prompt },
-        { role: 'user', content: [...imgC, { type: 'text', text: 'Find preImpact and postImpact. JSON only.' }] }]
+        { role: 'user', content: [...imgC, { type: 'text', text: 'Find lastPreImpact, impactCandidate, firstPostImpact. JSON only.' }] }]
     }})
   });
   const d2 = await res2.json();
@@ -2202,10 +2211,23 @@ They should be 1-3 frames apart. Return ONLY: {"preImpact":<frame>,"postImpact":
   try {
     const m2 = raw2.match(/\{[\s\S]*\}/);
     if (m2) {
-      const p2 = JSON.parse(m2[0]);
-      if (p2.preImpact != null && p2.postImpact != null && p2.preImpact < p2.postImpact) {
-        const p6 = Math.round((p2.preImpact + p2.postImpact) / 2);
-        console.log(`[Pass2] pre=${p2.preImpact} post=${p2.postImpact} → P6=${p6}`);
+      const r = JSON.parse(m2[0]);
+      
+      // Best case: use impactCandidate directly
+      if (r.impactCandidate != null) {
+        console.log(`[Pass2] lastPre=${r.lastPreImpact} candidate=${r.impactCandidate} firstPost=${r.firstPostImpact} → P6=${r.impactCandidate}`);
+        return r.impactCandidate;
+      }
+      
+      // Fallback: old 2-value format (preImpact/postImpact)
+      if (r.preImpact != null && r.postImpact != null && r.preImpact < r.postImpact) {
+        let p6;
+        if ((r.postImpact - r.preImpact) <= 1) {
+          p6 = r.preImpact; // prefer earlier frame when gap is tiny
+        } else {
+          p6 = Math.round((r.preImpact + r.postImpact) / 2);
+        }
+        console.log(`[Pass2] pre=${r.preImpact} post=${r.postImpact} → P6=${p6} (legacy format)`);
         return p6;
       }
     }
