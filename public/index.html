@@ -2105,273 +2105,288 @@ function extractPoseMetrics(landmarks) {
 // Step 3: MediaPipe measures biomechanics on 8 selected frames
 
 async function detectAnchorPhases(frames) {
-  // Sample 20 evenly from 60 frames for Vision AI
+  // PASS 1: Detect P1, P4, P8 only
   const step = Math.max(1, Math.floor(frames.length / 20));
   const sampled = [];
   for (let i = 0; i < frames.length && sampled.length < 20; i += step) {
     sampled.push({ base64: frames[i].base64, originalIndex: i });
   }
 
-  const imageContent = sampled.map((f, idx) => ([
+  const imgContent = sampled.map(f => ([
     { type: 'text', text: `Frame ${f.originalIndex}:` },
     { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
   ])).flat();
 
-  const systemPrompt = `You are a golf swing phase detector. You will see frames from a golf swing video in chronological order. Each frame is labeled with its frame number.
+  const p1Prompt = `You are a golf swing phase detector. Frames are chronological with frame numbers.
 
-You MUST identify exactly 4 key positions:
+Identify exactly 3 positions:
+P1 (Setup): Golfer still, club on ground, bent forward. BEFORE movement.
+P4 (Top of Backswing): Hands HIGHEST, max shoulder turn, club backward.
+P8 (Finish): Final pose, club behind body, facing target, weight on front foot.
 
-P1 (Setup/Address): Golfer standing still over the ball. Club on ground. Body bent forward. This is BEFORE any movement begins.
+RULES: P1 < P4 < P8. Return ONLY: {"P1":<frame>,"P4":<frame>,"P8":<frame>}`;
 
-P4 (Top of Backswing): Hands at the HIGHEST point. Maximum shoulder turn away from target. Club points backward/downward behind the golfer. This is the PEAK of the backswing.
-
-P6 (Impact): Club is at its LOWEST point, at or near the ball. Arms extended STRAIGHT DOWN. This is the moment of ball contact. The club head is near the ground.
-
-P8 (Finish): Final balanced pose. Club wrapped behind body/head. Body fully faces target. Weight on front foot. This is AFTER the swing is complete.
-
-RULES:
-- Frame numbers MUST be in ascending order: P1 < P4 < P6 < P8
-- P1 is usually in the first 15% of frames
-- P4 is usually around 35-50% of frames
-- P6 is usually around 55-70% of frames (very close after P4, downswing is fast)
-- P8 is usually in the last 15% of frames
-- Use the frame numbers shown in the labels, not array indices
-
-Return ONLY a JSON object (no markdown, no explanation):
-{"P1":<frame_number>,"P4":<frame_number>,"P6":<frame_number>,"P8":<frame_number>}`;
-
-  const payload = {
-    service: 'chat',
-    payload: {
-      model: 'gpt-4o',
-      max_tokens: 200,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: [...imageContent, { type: 'text', text: 'Identify P1, P4, P6, P8 frame numbers. Return only JSON.' }] }
-      ]
-    }
-  };
-
-  const res = await fetch(PROXY, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+  const res1 = await fetch(PROXY, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ service: 'chat', payload: {
+      model: 'gpt-4o', max_tokens: 150, temperature: 0.3,
+      messages: [{ role: 'system', content: p1Prompt },
+        { role: 'user', content: [...imgContent, { type: 'text', text: 'Identify P1, P4, P8. JSON only.' }] }]
+    }})
   });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error?.message || 'Anchor detection failed');
+  const d1 = await res1.json();
+  if (d1.error) throw new Error(d1.error?.message || 'Pass1 failed');
+  let raw1 = d1.choices[0].message.content.trim().replace(/```json|```/g, '').trim();
+  console.log('[Pass1] Raw:', raw1);
+  const m1 = raw1.match(/\{[\s\S]*\}/);
+  if (!m1) throw new Error('Pass1: no JSON');
+  const pass1 = JSON.parse(m1[0]);
+  if (!(pass1.P1 < pass1.P4 && pass1.P4 < pass1.P8)) throw new Error('Pass1: not ascending');
+  console.log(`[Pass1] P1=${pass1.P1}, P4=${pass1.P4}, P8=${pass1.P8}`);
 
-  let raw = data.choices[0].message.content.trim().replace(/```json|```/g, '').trim();
-  console.log('[Anchors] Vision AI raw:', raw);
+  // PASS 2: Focused impact detection
+  const p6 = await detectImpactPass2(frames, pass1.P4);
+  
+  // Safety: P6 must be between P4 and P8
+  let safeP6 = p6;
+  if (safeP6 <= pass1.P4) {
+    safeP6 = pass1.P4 + Math.max(2, Math.round((pass1.P8 - pass1.P4) * 0.3));
+    console.warn(`[Safety] P6 was <= P4, corrected to ${safeP6}`);
+  }
+  if (safeP6 >= pass1.P8) {
+    safeP6 = pass1.P4 + Math.round((pass1.P8 - pass1.P4) * 0.5);
+    console.warn(`[Safety] P6 was >= P8, corrected to ${safeP6}`);
+  }
+  
+  console.log(`[Anchors] Final: P1=${pass1.P1}, P4=${pass1.P4}, P6=${safeP6}, P8=${pass1.P8}`);
+  return { P1: pass1.P1, P4: pass1.P4, P6: safeP6, P8: pass1.P8 };
+}
 
-  // Parse JSON
-  const match = raw.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('Vision AI did not return valid JSON');
+async function detectImpactPass2(frames, p4Frame) {
+  const wStart = Math.min(p4Frame + 5, frames.length - 2);
+  const wEnd = Math.min(p4Frame + 15, frames.length - 1);
+  console.log(`[Pass2] Window: frame ${wStart}→${wEnd}`);
+  
+  const wFrames = [];
+  for (let i = wStart; i <= wEnd; i++) wFrames.push({ base64: frames[i].base64, originalIndex: i });
+  if (wFrames.length < 3) return Math.round((wStart + wEnd) / 2);
 
-  let anchors;
+  const imgC = wFrames.map(f => ([
+    { type: 'text', text: `Frame ${f.originalIndex}:` },
+    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
+  ])).flat();
+
+  const p2Prompt = `You are a golf impact detector. These frames show downswing through impact.
+
+Impact = EXACT moment club hits ball. It is a TRANSITION, not a pose.
+
+Find TWO frames:
+1. preImpact: LAST frame BEFORE club hits ball (club approaching, arms down)
+2. postImpact: FIRST frame AFTER club hits ball (club passed ball, arms extending)
+
+They should be 1-3 frames apart. Return ONLY: {"preImpact":<frame>,"postImpact":<frame>}`;
+
+  const res2 = await fetch(PROXY, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ service: 'chat', payload: {
+      model: 'gpt-4o', max_tokens: 100, temperature: 0.2,
+      messages: [{ role: 'system', content: p2Prompt },
+        { role: 'user', content: [...imgC, { type: 'text', text: 'Find preImpact and postImpact. JSON only.' }] }]
+    }})
+  });
+  const d2 = await res2.json();
+  if (d2.error) throw new Error(d2.error?.message || 'Pass2 failed');
+  let raw2 = d2.choices[0].message.content.trim().replace(/```json|```/g, '').trim();
+  console.log('[Pass2] Raw:', raw2);
+  
   try {
-    anchors = JSON.parse(match[0]);
-  } catch(e) {
-    // Sanitize and retry
-    let sanitized = match[0].replace(/,\s*([}\]])/g, '$1').replace(/(\{|,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
-    anchors = JSON.parse(sanitized);
-  }
-
-  // Validate
-  const p1 = anchors.P1, p4 = anchors.P4, p6 = anchors.P6, p8 = anchors.P8;
-  if (p1 == null || p4 == null || p6 == null || p8 == null) throw new Error('Missing anchor phases');
-  if (!(p1 < p4 && p4 < p6 && p6 < p8)) throw new Error(`Anchors not ascending: P1=${p1}, P4=${p4}, P6=${p6}, P8=${p8}`);
-
-  console.log(`[Anchors] Detected: P1=${p1}, P4=${p4}, P6=${p6}, P8=${p8}`);
-  return { P1: p1, P4: p4, P6: p6, P8: p8 };
-}
-
-// ===== GEOMETRY-BASED PHASE DETECTION (P2, P3, P5, P7) =====
-
-// Lead Arm Angle: Left shoulder → Left wrist vector angle to horizontal
-// For right-handed golfer: landmarks[11]=left_shoulder, [15]=left_wrist
-function computeLeadArmAngle(landmarks) {
-  if (!landmarks) return null;
-  const lShoulder = landmarks[11];
-  const lWrist = landmarks[15];
-  if (!lShoulder || !lWrist || lShoulder.visibility < 0.3 || lWrist.visibility < 0.3) return null;
-  
-  const dx = lWrist.x - lShoulder.x;
-  const dy = lWrist.y - lShoulder.y;
-  // Angle to horizontal (0° = perfectly horizontal)
-  const angleRad = Math.atan2(dy, dx);
-  const angleDeg = angleRad * 180 / Math.PI;
-  // We want angle deviation from horizontal (0°)
-  return angleDeg;
-}
-
-// Shaft Angle: Grip point → Club head, angle to horizontal
-// Grip = average of wrists, Club head = extrapolated from elbow→wrist direction
-function computeShaftAngle(landmarks) {
-  if (!landmarks) return null;
-  const rWrist = landmarks[16], lWrist = landmarks[15];
-  const rElbow = landmarks[14], lElbow = landmarks[13];
-  if (!rWrist || !lWrist || !rElbow) return null;
-  if (rWrist.visibility < 0.3 || lWrist.visibility < 0.3) return null;
-  
-  // Grip point = midpoint of wrists
-  const gripX = (rWrist.x + lWrist.x) / 2;
-  const gripY = (rWrist.y + lWrist.y) / 2;
-  
-  // Club head = extrapolate from right elbow→right wrist direction
-  const dx = rWrist.x - rElbow.x;
-  const dy = rWrist.y - rElbow.y;
-  const len = Math.sqrt(dx*dx + dy*dy) + 0.0001;
-  const clubHeadX = rWrist.x + (dx / len) * 0.12;
-  const clubHeadY = rWrist.y + (dy / len) * 0.12;
-  
-  // Angle of grip→clubhead to horizontal
-  const shaftDx = clubHeadX - gripX;
-  const shaftDy = clubHeadY - gripY;
-  const angleDeg = Math.atan2(shaftDy, shaftDx) * 180 / Math.PI;
-  return angleDeg;
-}
-
-// Find frame in range where angle function returns value closest to horizontal (0° or 180°)
-function findClosestToHorizontal(poseResults, startIdx, endIdx, angleFn) {
-  let bestIdx = -1;
-  let bestDeviation = Infinity;
-  
-  for (let i = startIdx; i <= endIdx; i++) {
-    if (!poseResults[i]) continue;
-    const angle = angleFn(poseResults[i]);
-    if (angle === null) continue;
-    
-    // Deviation from horizontal: min of |angle|, |angle-180|, |angle+180|
-    const dev = Math.min(Math.abs(angle), Math.abs(angle - 180), Math.abs(angle + 180));
-    
-    if (dev < bestDeviation) {
-      bestDeviation = dev;
-      bestIdx = i;
+    const m2 = raw2.match(/\{[\s\S]*\}/);
+    if (m2) {
+      const p2 = JSON.parse(m2[0]);
+      if (p2.preImpact != null && p2.postImpact != null && p2.preImpact < p2.postImpact) {
+        const p6 = Math.round((p2.preImpact + p2.postImpact) / 2);
+        console.log(`[Pass2] pre=${p2.preImpact} post=${p2.postImpact} → P6=${p6}`);
+        return p6;
+      }
     }
-  }
+  } catch(e) { console.warn('[Pass2] Parse error:', e.message); }
   
-  return { frameIndex: bestIdx, deviation: bestDeviation };
+  const fb = Math.round((wStart + wEnd) / 2);
+  console.log(`[Pass2] Fallback P6=${fb}`);
+  return fb;
 }
 
-// Run MediaPipe on frames in specific ranges, return landmarks per frame index
+// Run MediaPipe on a range of frames
 async function runMediaPipeOnRange(frames, startIdx, endIdx) {
   const pose = await initMediaPipePose();
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   const results = {};
-  
   for (let i = startIdx; i <= endIdx && i < frames.length; i++) {
     try {
-      const landmarks = await processFrameWithPose(pose, frames[i].base64, canvas, ctx);
-      if (landmarks) results[i] = landmarks;
+      const lm = await processFrameWithPose(pose, frames[i].base64, canvas, ctx);
+      if (lm) results[i] = lm;
     } catch(e) {}
   }
-  
   return results;
 }
 
-// Detect P2, P3, P5, P7 using MediaPipe geometry
+// ===== GEOMETRY HELPER FUNCTIONS =====
+
+// Lead Arm Angle: Left Shoulder → Left Wrist to horizontal (right-handed golfer)
+function computeLeadArmAngle(landmarks) {
+  if (!landmarks) return null;
+  const lShoulder = landmarks[11], lWrist = landmarks[15];
+  if (!lShoulder || !lWrist || lShoulder.visibility < 0.3 || lWrist.visibility < 0.3) return null;
+  return Math.atan2(lWrist.y - lShoulder.y, lWrist.x - lShoulder.x) * 180 / Math.PI;
+}
+
+// Trail Arm Angle: Right Shoulder → Right Wrist to horizontal
+function computeTrailArmAngle(landmarks) {
+  if (!landmarks) return null;
+  const rShoulder = landmarks[12], rWrist = landmarks[16];
+  if (!rShoulder || !rWrist || rShoulder.visibility < 0.3 || rWrist.visibility < 0.3) return null;
+  return Math.atan2(rWrist.y - rShoulder.y, rWrist.x - rShoulder.x) * 180 / Math.PI;
+}
+
+// Find frame: angle closest to horizontal + wrist Y ≈ reference Y
+function findBestGeometryFrame(poseResults, startIdx, endIdx, angleFn, wristIdx, refIdx, yThresh) {
+  let bestIdx = -1, bestScore = Infinity;
+  for (let i = startIdx; i <= endIdx; i++) {
+    if (!poseResults[i]) continue;
+    const angle = angleFn(poseResults[i]);
+    if (angle === null) continue;
+    const angleDev = Math.min(Math.abs(angle), Math.abs(angle-180), Math.abs(angle+180));
+    let yDev = 0;
+    if (wristIdx !== null && refIdx !== null && poseResults[i][wristIdx] && poseResults[i][refIdx]) {
+      yDev = Math.abs(poseResults[i][wristIdx].y - poseResults[i][refIdx].y);
+      if (yDev > (yThresh || 0.08)) yDev *= 3;
+    }
+    const score = angleDev * 0.7 + yDev * 100 * 0.3;
+    if (score < bestScore) { bestScore = score; bestIdx = i; }
+  }
+  return { frameIndex: bestIdx, score: bestScore };
+}
+
+// P2: Wrist Y ≈ Hip Y + moved from address
+function detectP2(poseResults, frames, P1, P4) {
+  let bestIdx = -1, bestScore = Infinity;
+  const p1Pose = poseResults[P1];
+  const p1WristX = p1Pose ? (p1Pose[15].x + p1Pose[16].x) / 2 : null;
+  
+  for (let i = P1 + 1; i < P4; i++) {
+    if (!poseResults[i]) continue;
+    const lW = poseResults[i][15], rW = poseResults[i][16];
+    const lH = poseResults[i][23], rH = poseResults[i][24];
+    if (!lW || !rW || !lH || !rH) continue;
+    const avgWY = (lW.y + rW.y) / 2;
+    const avgHY = (lH.y + rH.y) / 2;
+    const avgWX = (lW.x + rW.x) / 2;
+    const yDiff = Math.abs(avgWY - avgHY);
+    let xShift = p1WristX !== null ? Math.abs(avgWX - p1WristX) : 0;
+    if (xShift < 0.02) continue;
+    const score = yDiff * 10 + (1 / (xShift + 0.01));
+    if (score < bestScore) { bestScore = score; bestIdx = i; }
+  }
+  
+  if (bestIdx >= 0) { console.log(`[Geo] P2 (Wrist≈Hip): f${bestIdx}`); return bestIdx; }
+  const fb = P1 + Math.round(0.35 * (P4 - P1));
+  console.log(`[Geo] P2 fallback: f${fb}`);
+  return fb;
+}
+
+// Main geometry detection
 async function detectGeometryPhases(frames, anchors, viewAngle, progressCallback) {
   const { P1, P4, P6, P8 } = anchors;
-  const isFaceOn = viewAngle === 'face-on';
-  const isDTL = viewAngle === 'dtl';
+  const isFO = viewAngle === 'face-on';
+  console.log(`[Geo] View:${viewAngle} P1=${P1} P4=${P4} P6=${P6} P8=${P8}`);
   
-  console.log(`[Geometry] View: ${viewAngle}, Anchors: P1=${P1}, P4=${P4}, P6=${P6}, P8=${P8}`);
-  
-  // Run MediaPipe on all search windows:
-  // P2/P3 search: P1 → P4
-  // P5 search: P4 → P6
-  // P7 search: P6 → P8 (Face On only, DTL uses interpolation)
-  const searchStart = P1;
-  const searchEnd = isFaceOn ? P8 : P6;
-  
-  console.log(`[Geometry] Running MediaPipe on frames ${searchStart}→${Math.min(searchEnd, P8)}...`);
-  const poseResults = await runMediaPipeOnRange(frames, searchStart, Math.min(P8, frames.length - 1));
-  const validCount = Object.keys(poseResults).length;
-  console.log(`[Geometry] MediaPipe valid: ${validCount} frames`);
-  
+  // Run MediaPipe on needed ranges
+  const poseResults = await runMediaPipeOnRange(frames, P1, Math.min(P8, frames.length - 1));
+  console.log(`[Geo] MediaPipe: ${Object.keys(poseResults).length} valid frames`);
   if (progressCallback) progressCallback(50);
   
-  // === P2: Shaft Parallel to Ground (before P4) ===
-  let P2;
-  const p2Result = findClosestToHorizontal(poseResults, P1 + 1, P4 - 1, computeShaftAngle);
-  if (p2Result.frameIndex >= 0 && p2Result.deviation < 45) {
-    P2 = p2Result.frameIndex;
-    console.log(`[Geometry] P2 (Shaft Parallel): frame ${P2} (dev=${p2Result.deviation.toFixed(1)}°)`);
-  } else {
-    P2 = P1 + Math.round(0.35 * (P4 - P1));
-    console.log(`[Geometry] P2 fallback (interpolated): frame ${P2}`);
-  }
+  // P2: Wrist ≈ Hip
+  const P2 = detectP2(poseResults, frames, P1, P4);
   
-  // === P3: Lead Arm Parallel to Ground (before P4) ===
+  // P3: Lead arm horizontal + wrist Y ≈ lead shoulder Y (landmarks 15=lWrist, 11=lShoulder)
   let P3;
-  const p3Result = findClosestToHorizontal(poseResults, Math.max(P2 + 1, P1 + 2), P4 - 1, computeLeadArmAngle);
-  if (p3Result.frameIndex >= 0 && p3Result.deviation < 45) {
-    P3 = p3Result.frameIndex;
-    console.log(`[Geometry] P3 (Lead Arm Parallel): frame ${P3} (dev=${p3Result.deviation.toFixed(1)}°)`);
+  const p3R = findBestGeometryFrame(poseResults, Math.max(P2+1, P1+2), P4-1, computeLeadArmAngle, 15, 11, 0.08);
+  if (p3R.frameIndex >= 0 && p3R.score < 40) {
+    P3 = p3R.frameIndex;
+    console.log(`[Geo] P3 (LeadArm+Y): f${P3} score=${p3R.score.toFixed(1)}`);
   } else {
     P3 = P1 + Math.round(0.70 * (P4 - P1));
-    console.log(`[Geometry] P3 fallback (interpolated): frame ${P3}`);
+    console.log(`[Geo] P3 fallback: f${P3}`);
   }
   
-  // === P5: Lead Arm Parallel to Ground (after P4, before P6) ===
+  // P5: Lead arm horizontal + wrist Y ≈ lead shoulder Y (P4→P6)
   let P5;
   if (P6 - P4 >= 3) {
-    const p5Result = findClosestToHorizontal(poseResults, P4 + 1, P6 - 1, computeLeadArmAngle);
-    if (p5Result.frameIndex >= 0 && p5Result.deviation < 45) {
-      P5 = p5Result.frameIndex;
-      console.log(`[Geometry] P5 (Lead Arm Parallel): frame ${P5} (dev=${p5Result.deviation.toFixed(1)}°)`);
+    const p5R = findBestGeometryFrame(poseResults, P4+1, P6-1, computeLeadArmAngle, 15, 11, 0.08);
+    if (p5R.frameIndex >= 0 && p5R.score < 40) {
+      P5 = p5R.frameIndex;
+      console.log(`[Geo] P5 (LeadArm+Y): f${P5} score=${p5R.score.toFixed(1)}`);
     } else {
       P5 = P4 + Math.round(0.50 * (P6 - P4));
-      console.log(`[Geometry] P5 fallback (interpolated): frame ${P5}`);
+      console.log(`[Geo] P5 fallback: f${P5}`);
     }
   } else {
     P5 = P4 + Math.round(0.50 * (P6 - P4));
-    console.log(`[Geometry] P5 (gap too small, interpolated): frame ${P5}`);
+    console.log(`[Geo] P5 (gap small): f${P5}`);
   }
   
-  // === P7: View-specific ===
+  // P7: View-specific
   let P7;
-  if (isFaceOn && P8 - P6 >= 3) {
-    // Face On: Lead Arm Parallel to Ground (after P6, before P8)
-    const p7FO = await runMediaPipeOnRange(frames, P6 + 1, P8 - 1);
-    Object.assign(poseResults, p7FO);
-    
-    const p7Result = findClosestToHorizontal(poseResults, P6 + 1, P8 - 1, computeLeadArmAngle);
-    if (p7Result.frameIndex >= 0 && p7Result.deviation < 45) {
-      P7 = p7Result.frameIndex;
-      console.log(`[Geometry] P7 Face On (Lead Arm Parallel): frame ${P7} (dev=${p7Result.deviation.toFixed(1)}°)`);
+  if (isFO && P8 - P6 >= 3) {
+    // Face On: Trail arm horizontal + trail wrist Y ≈ trail shoulder Y (16=rWrist, 12=rShoulder)
+    const p7R = findBestGeometryFrame(poseResults, P6+1, P8-1, computeTrailArmAngle, 16, 12, 0.08);
+    if (p7R.frameIndex >= 0 && p7R.score < 40) {
+      P7 = p7R.frameIndex;
+      console.log(`[Geo] P7 FO (TrailArm+Y): f${P7} score=${p7R.score.toFixed(1)}`);
     } else {
       P7 = P6 + Math.round(0.40 * (P8 - P6));
-      console.log(`[Geometry] P7 Face On fallback: frame ${P7}`);
+      console.log(`[Geo] P7 FO fallback: f${P7}`);
     }
   } else {
-    // DTL: Interpolation (lead arm detection unstable in DTL perspective)
     P7 = P6 + Math.round(0.40 * (P8 - P6));
-    console.log(`[Geometry] P7 DTL (interpolated): frame ${P7}`);
+    console.log(`[Geo] P7 DTL (interpolated): f${P7}`);
   }
   
   if (progressCallback) progressCallback(80);
   
-  // Build all 8 phases
-  const maxIdx = frames.length - 1;
-  const all = [P1, P2, P3, P4, P5, P6, P7, P8].map(v => Math.max(0, Math.min(v, maxIdx)));
+  // === SAFETY NETS: Validate and fix collisions ===
   
-  // Ensure strictly increasing
-  for (let i = 1; i < all.length; i++) {
-    if (all[i] <= all[i - 1]) all[i] = Math.min(all[i - 1] + 1, maxIdx);
-  }
+  // P2 must be between P1 and P4, with room for P3
+  if (P2 <= P1) P2 = P1 + Math.max(1, Math.round((P4 - P1) * 0.2));
+  if (P2 >= P4 - 1) P2 = P1 + Math.round((P4 - P1) * 0.35);
+  
+  // P3 must be between P2 and P4
+  if (P3 <= P2) P3 = P2 + 1;
+  if (P3 >= P4) P3 = P4 - 1;
+  if (P3 <= P2) P3 = Math.round((P2 + P4) / 2); // last resort
+  
+  // P5 must be between P4 and P6
+  if (P5 <= P4) P5 = P4 + 1;
+  if (P5 >= P6) P5 = P6 - 1;
+  if (P5 <= P4) P5 = Math.round((P4 + P6) / 2); // last resort
+  
+  // P7 must be between P6 and P8
+  if (P7 <= P6) P7 = P6 + 1;
+  if (P7 >= P8) P7 = P8 - 1;
+  if (P7 <= P6) P7 = Math.round((P6 + P8) / 2); // last resort
+  
+  // Minimum gap: at least 1 frame between each phase
+  console.log(`[Safety] Pre-check: P1=${P1} P2=${P2} P3=${P3} P4=${P4} P5=${P5} P6=${P6} P7=${P7} P8=${P8}`);
+  
+  // Build final, ensure increasing
+  const maxI = frames.length - 1;
+  const all = [P1,P2,P3,P4,P5,P6,P7,P8].map(v => Math.max(0, Math.min(v, maxI)));
+  for (let i = 1; i < all.length; i++) if (all[i] <= all[i-1]) all[i] = Math.min(all[i-1]+1, maxI);
   
   const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
-  const result = all.map((fi, i) => ({
-    position: `P${i+1}`,
-    name: names[i],
-    frame_index: fi,
-    timestamp: frames[fi].timestamp
-  }));
-  
-  console.log(`[Geometry] FINAL: ${result.map(p => `${p.position}=f${p.frame_index}(t=${p.timestamp.toFixed(2)})`).join(', ')}`);
+  const result = all.map((fi,i) => ({ position:`P${i+1}`, name:names[i], frame_index:fi, timestamp:frames[fi].timestamp }));
+  console.log(`[Geo] FINAL: ${result.map(p=>`${p.position}=f${p.frame_index}(t=${p.timestamp.toFixed(2)})`).join(', ')}`);
   return { phases: result, poseResults };
 }
 
@@ -2439,10 +2454,10 @@ async function startAnalysis() {
       setTimeout(resolve, 10000);
     });
 
-    const frames = await extractFrames(vid, 60);
+    const frames = await extractFrames(vid, 90);
     console.log(`[Analysis] Extracted ${frames.length} frames from ${vid.duration.toFixed(2)}s video`);
 
-    // Step 3: Vision AI → detect 4 anchor phases (P1, P4, P6, P8)
+    // Step 3: Vision AI → detect 4 anchor phases (P1, P4, P8) + focused P6
     updateLoadingStep(3);
     let positions;
     let anchors;
@@ -2451,15 +2466,31 @@ async function startAnalysis() {
       anchors = await detectAnchorPhases(frames);
       
       // Step 3b: MediaPipe geometry → detect P2, P3, P5, P7
-      const geoResult = await detectGeometryPhases(frames, anchors, selectedView, (pct) => {
-        pctEl.textContent = (50 + Math.round(pct * 0.2)) + '%';
-      });
-      positions = geoResult.phases;
-      poseResults = geoResult.poseResults;
-      console.log('[Analysis] Vision + Geometry detection successful');
+      try {
+        const geoResult = await detectGeometryPhases(frames, anchors, selectedView, (pct) => {
+          pctEl.textContent = (50 + Math.round(pct * 0.2)) + '%';
+        });
+        positions = geoResult.phases;
+        poseResults = geoResult.poseResults;
+        console.log('[Analysis] Vision + Geometry detection successful');
+      } catch(geoErr) {
+        // Geometry failed but anchors OK → interpolate P2,P3,P5,P7
+        console.warn('[Analysis] Geometry failed, using anchor + interpolation:', geoErr.message);
+        const { P1, P4, P6, P8 } = anchors;
+        const P2 = P1 + Math.round(0.35 * (P4 - P1));
+        const P3 = P1 + Math.round(0.70 * (P4 - P1));
+        const P5 = P4 + Math.round(0.50 * (P6 - P4));
+        const P7 = P6 + Math.round(0.40 * (P8 - P6));
+        const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
+        const all = [P1,P2,P3,P4,P5,P6,P7,P8];
+        for (let i = 1; i < all.length; i++) if (all[i] <= all[i-1]) all[i] = Math.min(all[i-1]+1, frames.length-1);
+        positions = all.map((fi, i) => ({ position:`P${i+1}`, name:names[i], frame_index:fi, timestamp:frames[fi].timestamp }));
+      }
     } catch(e) {
-      console.warn('[Analysis] Detection failed, using fallback:', e.message);
+      // Everything failed → full fallback
+      console.warn('[Analysis] All detection failed, using full fallback:', e.message);
       positions = generateFallbackPhases(frames.length);
+      positions.forEach(p => { p.timestamp = frames[Math.min(p.frame_index, frames.length-1)].timestamp; });
     }
 
     // Store timestamps for video seek
