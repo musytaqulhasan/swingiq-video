@@ -1652,7 +1652,7 @@ function seekVideoToPhase(posId) {
     vid.currentTime = targetTime;
   } else {
     // Fallback
-    const ratios = { P1:0.05, P2:0.20, P3:0.35, P4:0.50, P5:0.58, P6:0.65, P7:0.80, P8:0.92 };
+    const ratios = { P1:0.05, P2:0.20, P3:0.35, P4:0.50, P5:0.58, P6:0.65, P7:0.72, P8:0.92 };
     vid.currentTime = (ratios[posId] || 0) * vid.duration;
   }
 }
@@ -2274,7 +2274,7 @@ function detectP2(poseResults, frames, P1, P4) {
   const p1Pose = poseResults[P1];
   const p1WristX = p1Pose ? (p1Pose[15].x + p1Pose[16].x) / 2 : null;
   
-  for (let i = P1 + 1; i < P4; i++) {
+  for (let i = P1 + 1; i < P1 + Math.round(0.50 * (P4 - P1)); i++) {
     if (!poseResults[i]) continue;
     const lW = poseResults[i][15], rW = poseResults[i][16];
     const lH = poseResults[i][23], rH = poseResults[i][24];
@@ -2311,7 +2311,8 @@ async function detectGeometryPhases(frames, anchors, viewAngle, progressCallback
   
   // P3: Lead arm horizontal + wrist Y ≈ lead shoulder Y (landmarks 15=lWrist, 11=lShoulder)
   let P3;
-  const p3R = findBestGeometryFrame(poseResults, Math.max(P2+1, P1+2), P4-1, computeLeadArmAngle, 15, 11, 0.08);
+  const p3SearchEnd = P1 + Math.round(0.80 * (P4 - P1));
+  const p3R = findBestGeometryFrame(poseResults, Math.max(P2+1, P1+2), p3SearchEnd, computeLeadArmAngle, 15, 11, 0.08);
   if (p3R.frameIndex >= 0 && p3R.score < 40) {
     P3 = p3R.frameIndex;
     console.log(`[Geo] P3 (LeadArm+Y): f${P3} score=${p3R.score.toFixed(1)}`);
@@ -2345,12 +2346,12 @@ async function detectGeometryPhases(frames, anchors, viewAngle, progressCallback
       P7 = p7R.frameIndex;
       console.log(`[Geo] P7 FO (TrailArm+Y): f${P7} score=${p7R.score.toFixed(1)}`);
     } else {
-      P7 = P6 + Math.round(0.40 * (P8 - P6));
+      P7 = P6 + Math.round(0.25 * (P8 - P6));
       console.log(`[Geo] P7 FO fallback: f${P7}`);
     }
   } else {
-    P7 = P6 + Math.round(0.40 * (P8 - P6));
-    console.log(`[Geo] P7 DTL (interpolated): f${P7}`);
+    P7 = P6 + Math.round(0.25 * (P8 - P6));
+    console.log(`[Geo] P7 DTL (interpolated 25%): f${P7}`);
   }
   
   if (progressCallback) progressCallback(80);
@@ -2374,7 +2375,7 @@ async function detectGeometryPhases(frames, anchors, viewAngle, progressCallback
   // P7 must be between P6 and P8
   if (P7 <= P6) P7 = P6 + 1;
   if (P7 >= P8) P7 = P8 - 1;
-  if (P7 <= P6) P7 = Math.round((P6 + P8) / 2); // last resort
+  if (P7 <= P6) P7 = P6 + Math.max(1, Math.round(0.25 * (P8 - P6))); // last resort
   
   // Minimum gap: at least 1 frame between each phase
   console.log(`[Safety] Pre-check: P1=${P1} P2=${P2} P3=${P3} P4=${P4} P5=${P5} P6=${P6} P7=${P7} P8=${P8}`);
@@ -2392,7 +2393,7 @@ async function detectGeometryPhases(frames, anchors, viewAngle, progressCallback
 
 // Fallback if everything fails
 function generateFallbackPhases(frameCount) {
-  const ratios = [0.05, 0.20, 0.35, 0.50, 0.58, 0.65, 0.80, 0.92];
+  const ratios = [0.05, 0.20, 0.35, 0.50, 0.58, 0.65, 0.72, 0.92];
   const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
   return ratios.map((r, i) => ({
     position: `P${i+1}`,
@@ -2480,7 +2481,7 @@ async function startAnalysis() {
         const P2 = P1 + Math.round(0.35 * (P4 - P1));
         const P3 = P1 + Math.round(0.70 * (P4 - P1));
         const P5 = P4 + Math.round(0.50 * (P6 - P4));
-        const P7 = P6 + Math.round(0.40 * (P8 - P6));
+        const P7 = P6 + Math.round(0.25 * (P8 - P6));
         const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
         const all = [P1,P2,P3,P4,P5,P6,P7,P8];
         for (let i = 1; i < all.length; i++) if (all[i] <= all[i-1]) all[i] = Math.min(all[i-1]+1, frames.length-1);
