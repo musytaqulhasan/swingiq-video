@@ -2536,19 +2536,6 @@ async function startAnalysis() {
       }));
       poseResults = {};
       console.log(`[Analysis] GPT-only detection: ${positions.map(p=>`${p.position}=f${p.frame_index}`).join(', ')}`);
-      } catch(geoErr) {
-        // Geometry failed but anchors OK → interpolate P2,P3,P5,P7
-        console.warn('[Analysis] Geometry failed, using anchor + interpolation:', geoErr.message);
-        const { P1, P4, P6, P8 } = anchors;
-        const P2 = P1 + Math.round(0.35 * (P4 - P1));
-        const P3 = P1 + Math.round(0.70 * (P4 - P1));
-        const P5 = P4 + Math.round(0.50 * (P6 - P4));
-        const P7 = P6 + Math.round(0.25 * (P8 - P6));
-        const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
-        const all = [P1,P2,P3,P4,P5,P6,P7,P8];
-        for (let i = 1; i < all.length; i++) if (all[i] <= all[i-1]) all[i] = Math.min(all[i-1]+1, frames.length-1);
-        positions = all.map((fi, i) => ({ position:`P${i+1}`, name:names[i], frame_index:fi, timestamp:frames[fi].timestamp }));
-      }
     } catch(e) {
       // Everything failed → full fallback
       console.warn('[Analysis] All detection failed, using full fallback:', e.message);
