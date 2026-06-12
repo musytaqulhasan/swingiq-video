@@ -2130,6 +2130,7 @@ P2 (Takeaway): Club shaft is PARALLEL TO THE GROUND during takeaway. Hands are a
 P3 (Backswing): Lead arm (left arm for right-handed golfer) is approximately PARALLEL TO THE GROUND. Hands are at shoulder height. Mid-backswing.
 P4 (Top of Backswing): Hands at HIGHEST point. Maximum shoulder turn. Club points backward behind golfer. Peak of backswing.
 P5 (Downswing): Lead arm is approximately PARALLEL TO THE GROUND on the way DOWN. Hands at shoulder height but descending toward ball. Between top and impact.
+P6 (Impact): The moment the clubhead contacts the ball. Arms extended straight DOWN. Club at its LOWEST point near the ground. Choose the frame where the clubhead is closest to the ball, prefer slightly EARLIER if uncertain.
 P7 (Follow Through): Trail arm (right arm for right-handed golfer) is approximately PARALLEL TO THE GROUND after impact. Hands at shoulder height, body rotating toward target.
 P8 (Finish): Final balanced pose. Club wrapped behind body/head. Body fully faces target.
 
@@ -2140,18 +2141,18 @@ RULES:
 - P3 is between P2 and P4 (about 50-70% between P1 and P4)
 - P4 is around 35-50% of total frames
 - P5 is VERY close after P4 (downswing is fast, only 3-8 frames after P4)
+- P6 is VERY close after P5 (1-5 frames after P5)
 - P7 is shortly after impact
 - P8 is in the last 10% of frames
-- Do NOT include P6 (Impact) — that will be detected separately
 
-Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<frame>,"P7":<frame>,"P8":<frame>}`;
+Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<frame>,"P6":<frame>,"P7":<frame>,"P8":<frame>}`;
 
   const res1 = await fetch(PROXY, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ service: 'chat', payload: {
       model: 'gpt-4o', max_tokens: 200, temperature: 0.2,
       messages: [{ role: 'system', content: p1Prompt },
-        { role: 'user', content: [...imgContent, { type: 'text', text: 'Identify P1,P2,P3,P4,P5,P7,P8. Return only JSON.' }] }]
+        { role: 'user', content: [...imgContent, { type: 'text', text: 'Identify P1,P2,P3,P4,P5,P6,P7,P8. Return only JSON.' }] }]
     }})
   });
   const d1 = await res1.json();
@@ -2163,15 +2164,14 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
   const pass1 = JSON.parse(m1[0]);
   
   // Validate all phases present
-  const needed = ['P1','P2','P3','P4','P5','P7','P8'];
+  const needed = ['P1','P2','P3','P4','P5','P6','P7','P8'];
   for (const k of needed) {
     if (pass1[k] == null) throw new Error(`Pass1: missing ${k}`);
   }
   // Validate ascending
-  if (!(pass1.P1 < pass1.P2 && pass1.P2 < pass1.P3 && pass1.P3 < pass1.P4 && pass1.P4 < pass1.P5 && pass1.P5 < pass1.P7 && pass1.P7 < pass1.P8)) {
+  if (!(pass1.P1 < pass1.P2 && pass1.P2 < pass1.P3 && pass1.P3 < pass1.P4 && pass1.P4 < pass1.P5 && pass1.P5 < pass1.P6 && pass1.P6 < pass1.P7 && pass1.P7 < pass1.P8)) {
     console.warn('[Pass1] Not strictly ascending, attempting fix...');
-    // Auto-fix: ensure ascending
-    const keys = ['P1','P2','P3','P4','P5','P7','P8'];
+    const keys = ['P1','P2','P3','P4','P5','P6','P7','P8'];
     for (let i = 1; i < keys.length; i++) {
       if (pass1[keys[i]] <= pass1[keys[i-1]]) {
         pass1[keys[i]] = pass1[keys[i-1]] + 1;
@@ -2179,18 +2179,81 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
     }
   }
   
-  console.log(`[Pass1] P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P7=${pass1.P7}, P8=${pass1.P8}`);
+  console.log(`[Pass1] P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P6=${pass1.P6}, P7=${pass1.P7}, P8=${pass1.P8}`);
 
-  // PASS 2: Focused impact detection for P6
-  const p6 = await detectImpactPass2(frames, pass1.P4);
+  // IMPACT REFINEMENT PASS: Refine P6 using narrow window
+  const refinedP6 = await refineImpact(frames, pass1.P6);
   
-  // Validate P6 is between P5 and P7
-  let safeP6 = p6;
+  // Validate refined P6 is between P5 and P7
+  let safeP6 = refinedP6;
   if (safeP6 <= pass1.P5) safeP6 = pass1.P5 + 1;
   if (safeP6 >= pass1.P7) safeP6 = pass1.P7 - 1;
   
   console.log(`[Anchors] Final: P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P6=${safeP6}, P7=${pass1.P7}, P8=${pass1.P8}`);
   return { P1:pass1.P1, P2:pass1.P2, P3:pass1.P3, P4:pass1.P4, P5:pass1.P5, P6:safeP6, P7:pass1.P7, P8:pass1.P8 };
+}
+
+// IMPACT REFINEMENT: Send P6±5 frames to GPT for precise detection
+async function refineImpact(frames, initialP6) {
+  const wStart = Math.max(0, initialP6 - 5);
+  const wEnd = Math.min(frames.length - 1, initialP6 + 5);
+  console.log(`[ImpactRefine] Window: f${wStart}-f${wEnd} (initial P6=${initialP6})`);
+  
+  const wFrames = [];
+  for (let i = wStart; i <= wEnd; i++) wFrames.push({ base64: frames[i].base64, originalIndex: i });
+  if (wFrames.length < 3) return initialP6;
+
+  console.log(`[ImpactRefine] Frames sent: [${wFrames.map(f => f.originalIndex).join(', ')}]`);
+
+  const imgC = wFrames.map(f => ([
+    { type: 'text', text: `Frame ${f.originalIndex}:` },
+    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
+  ])).flat();
+
+  const prompt = `You are identifying the EXACT golf impact frame. These frames show a narrow window around the estimated impact moment.
+
+Identify THREE frames:
+
+1. lastPreImpact: The FINAL frame BEFORE the clubhead reaches the ball. The club is still approaching.
+2. impact: The frame where the clubhead is CLOSEST to the ball position. This is the actual moment of contact.
+3. firstPostImpact: The FIRST frame AFTER the clubhead has passed the ball.
+
+CRITICAL RULES:
+- impact is the frame where the clubhead appears to be touching or closest to the ball
+- Do NOT select a frame where the clubhead has clearly passed the ball
+- Do NOT select a frame where the body is already releasing
+- If uncertain between two adjacent frames, choose the EARLIER frame
+- lastPreImpact < impact < firstPostImpact
+
+Return ONLY: {"lastPreImpact":<frame>,"impact":<frame>,"firstPostImpact":<frame>}`;
+
+  const res = await fetch(PROXY, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ service: 'chat', payload: {
+      model: 'gpt-4o', max_tokens: 100, temperature: 0.1,
+      messages: [{ role: 'system', content: prompt },
+        { role: 'user', content: [...imgC, { type: 'text', text: 'Find lastPreImpact, impact, firstPostImpact. JSON only.' }] }]
+    }})
+  });
+  const d = await res.json();
+  if (d.error) { console.warn('[ImpactRefine] API error:', d.error); return initialP6; }
+  
+  let raw = d.choices[0].message.content.trim().replace(/```json|```/g, '').trim();
+  console.log('[ImpactRefine] Raw:', raw);
+  
+  try {
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (m) {
+      const r = JSON.parse(m[0]);
+      if (r.impact != null) {
+        console.log(`[ImpactRefine] lastPreImpact=${r.lastPreImpact} impact=${r.impact} firstPostImpact=${r.firstPostImpact} → P6=${r.impact}`);
+        return r.impact;
+      }
+    }
+  } catch(e) { console.warn('[ImpactRefine] Parse error:', e.message); }
+  
+  console.log(`[ImpactRefine] Fallback: keeping initial P6=${initialP6}`);
+  return initialP6;
 }
 
 async function detectImpactPass2(frames, p4Frame) {
