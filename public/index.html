@@ -1123,6 +1123,24 @@ body {
     border-right: 1px solid #e5e7eb;
   }
 }
+#debug-panel {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.92);
+  color: #00ff00;
+  font-size: 10px;
+  font-family: monospace;
+  z-index: 99999;
+  padding: 6px 8px;
+  display: none;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
+}
+#debug-panel.active { display: block; }
+#debug-panel div { border-bottom: 1px solid rgba(0,255,0,0.1); padding: 2px 0; }
 </style>
 </head>
 <body>
@@ -1624,26 +1642,25 @@ function seekVideoToPhase(posId) {
   const vid = document.getElementById('resultVideo');
   if (!vid || !vid.duration) return;
 
-  // Use stored real timestamps from analysis
   const timestamps = window._phaseTimestamps || {};
   const targetTime = timestamps[posId];
 
-  // Highlight card
+  debugLog(`[Seek] ${posId} target=${targetTime?.toFixed(3)}s`);
+
   document.querySelectorAll('.phase-card').forEach(c => c.classList.remove('active-phase'));
   const card = document.getElementById('phaseCard_' + posId);
   if (card) card.classList.add('active-phase');
 
-  // Seek with frame render guarantee
   vid.pause();
   const onSeeked = () => {
     vid.removeEventListener('seeked', onSeeked);
     if ('requestVideoFrameCallback' in vid) {
       vid.requestVideoFrameCallback(() => {
-        console.log(`[Seek] ${posId} → target=${targetTime?.toFixed(3)}s, actual=${vid.currentTime.toFixed(3)}s`);
+        debugLog(`[SeekResult] ${posId} requested=${targetTime?.toFixed(3)}s actual=${vid.currentTime.toFixed(3)}s diff=${targetTime ? (vid.currentTime - targetTime).toFixed(3) : '?'}s`);
       });
     } else {
       vid.currentTime = vid.currentTime + 0.00001;
-      console.log(`[Seek] ${posId} → t=${vid.currentTime.toFixed(3)}s`);
+      debugLog(`[SeekResult] ${posId} requested=${targetTime?.toFixed(3)}s actual=${vid.currentTime.toFixed(3)}s (nudge)`);
     }
   };
   vid.addEventListener('seeked', onSeeked);
@@ -1651,9 +1668,9 @@ function seekVideoToPhase(posId) {
   if (targetTime !== undefined) {
     vid.currentTime = targetTime;
   } else {
-    // Fallback
     const ratios = { P1:0.05, P2:0.20, P3:0.35, P4:0.50, P5:0.58, P6:0.65, P7:0.72, P8:0.92 };
     vid.currentTime = (ratios[posId] || 0) * vid.duration;
+    debugLog(`[Seek] ${posId} fallback ratio`);
   }
 }
 
@@ -1841,6 +1858,20 @@ function drawOverlay() {
   }
 }
 // ===== STATE =====
+// ===== DEBUG MODE =====
+const DEBUG_MODE = true;
+function debugLog(msg) {
+  console.log(msg);
+  if (!DEBUG_MODE) return;
+  const panel = document.getElementById('debug-panel');
+  if (!panel) return;
+  if (!panel.classList.contains('active')) panel.classList.add('active');
+  const row = document.createElement('div');
+  row.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg);
+  panel.appendChild(row);
+  panel.scrollTop = panel.scrollHeight;
+}
+
 const PROXY = '/api/proxy';
 const UPLOAD = '/api/upload';
 
@@ -2112,9 +2143,9 @@ async function detectAnchorPhases(frames) {
     sampled.push({ base64: frames[i].base64, originalIndex: i });
   }
 
-  console.log(`[Pass1] Total frames: ${frames.length}, Step: ${step}, Sampled: ${sampled.length}`);
-  console.log(`[Pass1] Frame indices sent: [${sampled.map(s => s.originalIndex).join(', ')}]`);
-  console.log(`[Pass1] Timestamps sent: [${sampled.map(s => frames[s.originalIndex].timestamp.toFixed(3)).join(', ')}]`);
+  debugLog(`[Pass1] Total frames: ${frames.length}, Step: ${step}, Sampled: ${sampled.length}`);
+  debugLog(`[Pass1] Frame indices sent: [${sampled.map(s => s.originalIndex).join(', ')}]`);
+  debugLog(`[Pass1] Timestamps sent: [${sampled.map(s => frames[s.originalIndex].timestamp.toFixed(3)).join(', ')}]`);
 
   const imgContent = sampled.map(f => ([
     { type: 'text', text: `Frame ${f.originalIndex}:` },
@@ -2158,7 +2189,7 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
   const d1 = await res1.json();
   if (d1.error) throw new Error(d1.error?.message || 'Pass1 failed');
   let raw1 = d1.choices[0].message.content.trim().replace(/```json|```/g, '').trim();
-  console.log('[Pass1] Raw:', raw1);
+  debugLog(`[Pass1] Raw: ${raw1}`);
   const m1 = raw1.match(/\{[\s\S]*\}/);
   if (!m1) throw new Error('Pass1: no JSON');
   const pass1 = JSON.parse(m1[0]);
@@ -2170,7 +2201,7 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
   }
   // Validate ascending
   if (!(pass1.P1 < pass1.P2 && pass1.P2 < pass1.P3 && pass1.P3 < pass1.P4 && pass1.P4 < pass1.P5 && pass1.P5 < pass1.P6 && pass1.P6 < pass1.P7 && pass1.P7 < pass1.P8)) {
-    console.warn('[Pass1] Not strictly ascending, attempting fix...');
+    debugLog('[Pass1] WARNING: Not strictly ascending, auto-fixing...');
     const keys = ['P1','P2','P3','P4','P5','P6','P7','P8'];
     for (let i = 1; i < keys.length; i++) {
       if (pass1[keys[i]] <= pass1[keys[i-1]]) {
@@ -2179,7 +2210,7 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
     }
   }
   
-  console.log(`[Pass1] P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P6=${pass1.P6}, P7=${pass1.P7}, P8=${pass1.P8}`);
+  debugLog(`[Pass1] P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P6=${pass1.P6}, P7=${pass1.P7}, P8=${pass1.P8}`);
 
   // IMPACT REFINEMENT PASS: Refine P6 using narrow window
   const refinedP6 = await refineImpact(frames, pass1.P6);
@@ -2189,7 +2220,7 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
   if (safeP6 <= pass1.P5) safeP6 = pass1.P5 + 1;
   if (safeP6 >= pass1.P7) safeP6 = pass1.P7 - 1;
   
-  console.log(`[Anchors] Final: P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P6=${safeP6}, P7=${pass1.P7}, P8=${pass1.P8}`);
+  debugLog(`[Anchors] Final: P1=${pass1.P1} P2=${pass1.P2} P3=${pass1.P3} P4=${pass1.P4} P5=${pass1.P5} P6=${safeP6} P7=${pass1.P7} P8=${pass1.P8}`);
   return { P1:pass1.P1, P2:pass1.P2, P3:pass1.P3, P4:pass1.P4, P5:pass1.P5, P6:safeP6, P7:pass1.P7, P8:pass1.P8 };
 }
 
@@ -2197,13 +2228,13 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
 async function refineImpact(frames, initialP6) {
   const wStart = Math.max(0, initialP6 - 5);
   const wEnd = Math.min(frames.length - 1, initialP6 + 5);
-  console.log(`[ImpactRefine] Window: f${wStart}-f${wEnd} (initial P6=${initialP6})`);
+  debugLog(`[ImpactRefine] Window: f${wStart}-f${wEnd} (initial P6=${initialP6})`);
   
   const wFrames = [];
   for (let i = wStart; i <= wEnd; i++) wFrames.push({ base64: frames[i].base64, originalIndex: i });
   if (wFrames.length < 3) return initialP6;
 
-  console.log(`[ImpactRefine] Frames sent: [${wFrames.map(f => f.originalIndex).join(', ')}]`);
+  debugLog(`[ImpactRefine] Frames sent: [${wFrames.map(f => f.originalIndex).join(', ')}]`);
 
   const imgC = wFrames.map(f => ([
     { type: 'text', text: `Frame ${f.originalIndex}:` },
@@ -2236,23 +2267,23 @@ Return ONLY: {"lastPreImpact":<frame>,"impact":<frame>,"firstPostImpact":<frame>
     }})
   });
   const d = await res.json();
-  if (d.error) { console.warn('[ImpactRefine] API error:', d.error); return initialP6; }
+  if (d.error) { debugLog(`[ImpactRefine] API error: ${d.error?.message}`); return initialP6; }
   
   let raw = d.choices[0].message.content.trim().replace(/```json|```/g, '').trim();
-  console.log('[ImpactRefine] Raw:', raw);
+  debugLog(`[ImpactRefine] Raw: ${raw}`);
   
   try {
     const m = raw.match(/\{[\s\S]*\}/);
     if (m) {
       const r = JSON.parse(m[0]);
       if (r.impact != null) {
-        console.log(`[ImpactRefine] lastPreImpact=${r.lastPreImpact} impact=${r.impact} firstPostImpact=${r.firstPostImpact} → P6=${r.impact}`);
+        debugLog(`[ImpactRefine] lastPreImpact=${r.lastPreImpact} impact=${r.impact} firstPostImpact=${r.firstPostImpact} → P6=${r.impact}`);
         return r.impact;
       }
     }
-  } catch(e) { console.warn('[ImpactRefine] Parse error:', e.message); }
+  } catch(e) { debugLog(`[ImpactRefine] Parse error: ${e.message}`); }
   
-  console.log(`[ImpactRefine] Fallback: keeping initial P6=${initialP6}`);
+  debugLog(`[ImpactRefine] Fallback: keeping P6=${initialP6}`);
   return initialP6;
 }
 
@@ -2535,7 +2566,7 @@ function extractBiomechanicsFromPose(poseResults, phases) {
       };
     }
   }
-  console.log(`[Biomechanics] Extracted for ${Object.keys(bio).length}/8 phases`);
+  debugLog(`[Biomechanics] Extracted for ${Object.keys(bio).length}/8 phases`);
   return bio;
 }
 
@@ -2574,9 +2605,11 @@ async function startAnalysis() {
       setTimeout(resolve, 10000);
     });
 
+    debugLog(`[Device] ${navigator.userAgent}`);
+    debugLog(`[Platform] ${navigator.platform}`);
     const frames = await extractFrames(vid, 90);
-    console.log(`[Analysis] Extracted ${frames.length} frames from ${vid.duration.toFixed(2)}s video`);
-    console.log(`[Analysis] Frame timestamps: [${frames.map(f => f.timestamp.toFixed(3)).join(', ')}]`);
+    debugLog(`[Analysis] Extracted ${frames.length} frames from ${vid.duration.toFixed(2)}s video`);
+    debugLog(`[Analysis] Frame timestamps: [${frames.map(f => f.timestamp.toFixed(3)).join(', ')}]`);
 
     // Step 3: Vision AI → detect 4 anchor phases (P1, P4, P8) + focused P6
     updateLoadingStep(3);
@@ -2598,10 +2631,10 @@ async function startAnalysis() {
         position: keys[i], name: names[i], frame_index: fi, timestamp: frames[fi].timestamp
       }));
       poseResults = {};
-      console.log(`[Analysis] GPT-only detection: ${positions.map(p=>`${p.position}=f${p.frame_index}`).join(', ')}`);
+      debugLog(`[Analysis] GPT-only detection: ${positions.map(p=>`${p.position}=f${p.frame_index}`).join(', ')}`);
     } catch(e) {
       // Everything failed → full fallback
-      console.warn('[Analysis] All detection failed, using full fallback:', e.message);
+      debugLog(`[Analysis] All detection failed, fallback: ${e.message}`);
       positions = generateFallbackPhases(frames.length);
       positions.forEach(p => { p.timestamp = frames[Math.min(p.frame_index, frames.length-1)].timestamp; });
     }
@@ -2611,7 +2644,7 @@ async function startAnalysis() {
     positions.forEach(p => {
       window._phaseTimestamps[p.position] = p.timestamp || frames[Math.min(p.frame_index, frames.length-1)].timestamp;
     });
-    console.log('[Phases] Timestamps stored:', window._phaseTimestamps);
+    debugLog(`[Phases] Timestamps: ${JSON.stringify(window._phaseTimestamps)}`);
 
     // Step 4: Re-extract HQ frames + extract biomechanics
     updateLoadingStep(4);
@@ -2806,5 +2839,6 @@ function renderResults(data) {
 // For MVP, auto-login
 // navigateTo('pageLogin'); // start at login
 </script>
+<div id="debug-panel"></div>
 </body>
 </html>
