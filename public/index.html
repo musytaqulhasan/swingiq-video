@@ -2105,7 +2105,7 @@ function extractPoseMetrics(landmarks) {
 // Step 3: MediaPipe measures biomechanics on 8 selected frames
 
 async function detectAnchorPhases(frames) {
-  // PASS 1: Detect P1, P4, P8 only
+  // PASS 1: GPT-4o detects ALL phases except P6
   const step = Math.max(1, Math.floor(frames.length / 20));
   const sampled = [];
   for (let i = 0; i < frames.length && sampled.length < 20; i += step) {
@@ -2121,21 +2121,37 @@ async function detectAnchorPhases(frames) {
     { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${f.base64}`, detail: 'low' } }
   ])).flat();
 
-  const p1Prompt = `You are a golf swing phase detector. Frames are chronological with frame numbers.
+  const p1Prompt = `You are a golf swing phase detector. Frames are in chronological order, labeled with frame numbers.
 
-Identify exactly 3 positions:
-P1 (Setup): Golfer still, club on ground, bent forward. BEFORE movement.
-P4 (Top of Backswing): Hands HIGHEST, max shoulder turn, club backward.
-P8 (Finish): Final pose, club behind body, facing target, weight on front foot.
+Identify exactly 7 key positions:
 
-RULES: P1 < P4 < P8. Return ONLY: {"P1":<frame>,"P4":<frame>,"P8":<frame>}`;
+P1 (Setup/Address): Golfer standing still over the ball. Club on ground. BEFORE any movement begins.
+P2 (Takeaway): Club shaft is PARALLEL TO THE GROUND during takeaway. Hands are approximately at hip height. Early backswing.
+P3 (Backswing): Lead arm (left arm for right-handed golfer) is approximately PARALLEL TO THE GROUND. Hands are at shoulder height. Mid-backswing.
+P4 (Top of Backswing): Hands at HIGHEST point. Maximum shoulder turn. Club points backward behind golfer. Peak of backswing.
+P5 (Downswing): Lead arm is approximately PARALLEL TO THE GROUND on the way DOWN. Hands at shoulder height but descending toward ball. Between top and impact.
+P7 (Follow Through): Trail arm (right arm for right-handed golfer) is approximately PARALLEL TO THE GROUND after impact. Hands at shoulder height, body rotating toward target.
+P8 (Finish): Final balanced pose. Club wrapped behind body/head. Body fully faces target.
+
+RULES:
+- Frame numbers MUST be in strictly ascending order: P1 < P2 < P3 < P4 < P5 < P7 < P8
+- P1 is in the first 10% of frames
+- P2 is between P1 and P4, closer to P1 (about 25-35% between P1 and P4)
+- P3 is between P2 and P4 (about 50-70% between P1 and P4)
+- P4 is around 35-50% of total frames
+- P5 is VERY close after P4 (downswing is fast, only 3-8 frames after P4)
+- P7 is shortly after impact
+- P8 is in the last 10% of frames
+- Do NOT include P6 (Impact) — that will be detected separately
+
+Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<frame>,"P7":<frame>,"P8":<frame>}`;
 
   const res1 = await fetch(PROXY, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ service: 'chat', payload: {
-      model: 'gpt-4o', max_tokens: 150, temperature: 0.3,
+      model: 'gpt-4o', max_tokens: 200, temperature: 0.2,
       messages: [{ role: 'system', content: p1Prompt },
-        { role: 'user', content: [...imgContent, { type: 'text', text: 'Identify P1, P4, P8. JSON only.' }] }]
+        { role: 'user', content: [...imgContent, { type: 'text', text: 'Identify P1,P2,P3,P4,P5,P7,P8. Return only JSON.' }] }]
     }})
   });
   const d1 = await res1.json();
@@ -2145,25 +2161,36 @@ RULES: P1 < P4 < P8. Return ONLY: {"P1":<frame>,"P4":<frame>,"P8":<frame>}`;
   const m1 = raw1.match(/\{[\s\S]*\}/);
   if (!m1) throw new Error('Pass1: no JSON');
   const pass1 = JSON.parse(m1[0]);
-  if (!(pass1.P1 < pass1.P4 && pass1.P4 < pass1.P8)) throw new Error('Pass1: not ascending');
-  console.log(`[Pass1] P1=${pass1.P1}, P4=${pass1.P4}, P8=${pass1.P8}`);
+  
+  // Validate all phases present
+  const needed = ['P1','P2','P3','P4','P5','P7','P8'];
+  for (const k of needed) {
+    if (pass1[k] == null) throw new Error(`Pass1: missing ${k}`);
+  }
+  // Validate ascending
+  if (!(pass1.P1 < pass1.P2 && pass1.P2 < pass1.P3 && pass1.P3 < pass1.P4 && pass1.P4 < pass1.P5 && pass1.P5 < pass1.P7 && pass1.P7 < pass1.P8)) {
+    console.warn('[Pass1] Not strictly ascending, attempting fix...');
+    // Auto-fix: ensure ascending
+    const keys = ['P1','P2','P3','P4','P5','P7','P8'];
+    for (let i = 1; i < keys.length; i++) {
+      if (pass1[keys[i]] <= pass1[keys[i-1]]) {
+        pass1[keys[i]] = pass1[keys[i-1]] + 1;
+      }
+    }
+  }
+  
+  console.log(`[Pass1] P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P7=${pass1.P7}, P8=${pass1.P8}`);
 
-  // PASS 2: Focused impact detection
+  // PASS 2: Focused impact detection for P6
   const p6 = await detectImpactPass2(frames, pass1.P4);
   
-  // Safety: P6 must be between P4 and P8
+  // Validate P6 is between P5 and P7
   let safeP6 = p6;
-  if (safeP6 <= pass1.P4) {
-    safeP6 = pass1.P4 + Math.max(2, Math.round((pass1.P8 - pass1.P4) * 0.3));
-    console.warn(`[Safety] P6 was <= P4, corrected to ${safeP6}`);
-  }
-  if (safeP6 >= pass1.P8) {
-    safeP6 = pass1.P4 + Math.round((pass1.P8 - pass1.P4) * 0.5);
-    console.warn(`[Safety] P6 was >= P8, corrected to ${safeP6}`);
-  }
+  if (safeP6 <= pass1.P5) safeP6 = pass1.P5 + 1;
+  if (safeP6 >= pass1.P7) safeP6 = pass1.P7 - 1;
   
-  console.log(`[Anchors] Final: P1=${pass1.P1}, P4=${pass1.P4}, P6=${safeP6}, P8=${pass1.P8}`);
-  return { P1: pass1.P1, P4: pass1.P4, P6: safeP6, P8: pass1.P8 };
+  console.log(`[Anchors] Final: P1=${pass1.P1}, P2=${pass1.P2}, P3=${pass1.P3}, P4=${pass1.P4}, P5=${pass1.P5}, P6=${safeP6}, P7=${pass1.P7}, P8=${pass1.P8}`);
+  return { P1:pass1.P1, P2:pass1.P2, P3:pass1.P3, P4:pass1.P4, P5:pass1.P5, P6:safeP6, P7:pass1.P7, P8:pass1.P8 };
 }
 
 async function detectImpactPass2(frames, p4Frame) {
@@ -2496,14 +2523,19 @@ async function startAnalysis() {
     try {
       anchors = await detectAnchorPhases(frames);
       
-      // Step 3b: MediaPipe geometry → detect P2, P3, P5, P7
-      try {
-        const geoResult = await detectGeometryPhases(frames, anchors, selectedView, (pct) => {
-          pctEl.textContent = (50 + Math.round(pct * 0.2)) + '%';
-        });
-        positions = geoResult.phases;
-        poseResults = geoResult.poseResults;
-        console.log('[Analysis] Vision + Geometry detection successful');
+      // ALL phases from GPT (no geometry detection)
+      const allPhases = anchors;
+      const names = ['Setup/Address','Takeaway','Backswing','Top of Backswing','Downswing','Impact','Follow Through','Finish'];
+      const keys = ['P1','P2','P3','P4','P5','P6','P7','P8'];
+      const indices = keys.map(k => Math.max(0, Math.min(allPhases[k], frames.length-1)));
+      // Ensure strictly increasing
+      for (let i=1; i<indices.length; i++) if (indices[i]<=indices[i-1]) indices[i]=Math.min(indices[i-1]+1, frames.length-1);
+      
+      positions = indices.map((fi,i) => ({
+        position: keys[i], name: names[i], frame_index: fi, timestamp: frames[fi].timestamp
+      }));
+      poseResults = {};
+      console.log(`[Analysis] GPT-only detection: ${positions.map(p=>`${p.position}=f${p.frame_index}`).join(', ')}`);
       } catch(geoErr) {
         // Geometry failed but anchors OK → interpolate P2,P3,P5,P7
         console.warn('[Analysis] Geometry failed, using anchor + interpolation:', geoErr.message);
