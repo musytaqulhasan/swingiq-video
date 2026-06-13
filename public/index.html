@@ -2221,6 +2221,10 @@ Return ONLY JSON: {"P1":<frame>,"P2":<frame>,"P3":<frame>,"P4":<frame>,"P5":<fra
   if (safeP6 >= pass1.P7) safeP6 = pass1.P7 - 1;
   
   debugLog(`[Anchors] Final: P1=${pass1.P1} P2=${pass1.P2} P3=${pass1.P3} P4=${pass1.P4} P5=${pass1.P5} P6=${safeP6} P7=${pass1.P7} P8=${pass1.P8}`);
+  
+  const _P1=pass1.P1,_P2=pass1.P2,_P3=pass1.P3,_P4=pass1.P4,_P5=pass1.P5,_P6=safeP6,_P7=pass1.P7,_P8=pass1.P8;
+  debugLog(`[GPT Final] P1=${_P1} P2=${_P2} P3=${_P3} P4=${_P4} P5=${_P5} P6=${_P6} P7=${_P7} P8=${_P8}`);
+  debugLog(`[GPT Times] P1=${frames[_P1]?.timestamp.toFixed(3)} P2=${frames[_P2]?.timestamp.toFixed(3)} P3=${frames[_P3]?.timestamp.toFixed(3)} P4=${frames[_P4]?.timestamp.toFixed(3)} P5=${frames[_P5]?.timestamp.toFixed(3)} P6=${frames[_P6]?.timestamp.toFixed(3)} P7=${frames[_P7]?.timestamp.toFixed(3)} P8=${frames[_P8]?.timestamp.toFixed(3)}`);
   return { P1:pass1.P1, P2:pass1.P2, P3:pass1.P3, P4:pass1.P4, P5:pass1.P5, P6:safeP6, P7:pass1.P7, P8:pass1.P8 };
 }
 
