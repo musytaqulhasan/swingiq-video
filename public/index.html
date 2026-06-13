@@ -2611,8 +2611,26 @@ async function startAnalysis() {
 
     debugLog(`[Device] ${navigator.userAgent}`);
     debugLog(`[Platform] ${navigator.platform}`);
+    
+    // Check video metadata duration before extraction
+    const metaDuration = vid.duration;
+    debugLog(`[Video] Browser reports duration: ${metaDuration.toFixed(3)}s`);
+    
     const frames = await extractFrames(vid, 90);
     debugLog(`[Analysis] Extracted ${frames.length} frames from ${vid.duration.toFixed(2)}s video`);
+    
+    // Duration warning: check for browser discrepancy
+    const firstTs = frames[0]?.timestamp || 0;
+    const lastTs = frames[frames.length - 1]?.timestamp || 0;
+    const extractedSpan = lastTs - firstTs;
+    if (Math.abs(metaDuration - extractedSpan) > 0.1) {
+      debugLog(`[WARNING] Duration mismatch! Meta=${metaDuration.toFixed(3)}s Extracted span=${extractedSpan.toFixed(3)}s Diff=${(metaDuration - extractedSpan).toFixed(3)}s`);
+    }
+    // Check if browser is Safari (known seek issues)
+    const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+    if (isSafari) {
+      debugLog(`[WARNING] Safari detected — frame extraction may differ from Chromium browsers`);
+    }
     debugLog(`[Analysis] Frame timestamps: [${frames.map(f => f.timestamp.toFixed(3)).join(', ')}]`);
 
     // Step 3: Vision AI → detect 4 anchor phases (P1, P4, P8) + focused P6
