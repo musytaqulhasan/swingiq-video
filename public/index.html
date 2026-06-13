@@ -1134,6 +1134,7 @@ body {
   font-family: monospace;
   z-index: 99999;
   padding: 6px 8px;
+  padding-top: 32px;
   display: none;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1141,6 +1142,23 @@ body {
 }
 #debug-panel.active { display: block; }
 #debug-panel div { border-bottom: 1px solid rgba(0,255,0,0.1); padding: 2px 0; }
+#debug-panel .debug-toolbar {
+  position: sticky; top: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.95);
+  padding: 4px 0;
+  margin: -32px -8px 4px -8px;
+  padding: 4px 8px;
+  display: flex; gap: 8px;
+  border-bottom: 1px solid #00ff00;
+  z-index: 1;
+}
+#debug-panel .debug-toolbar button {
+  background: #00ff00; color: #000;
+  border: none; border-radius: 3px;
+  font-size: 10px; font-family: monospace; font-weight: bold;
+  padding: 3px 10px; cursor: pointer;
+}
+#debug-panel .debug-toolbar button:active { opacity: 0.7; }
 </style>
 </head>
 <body>
@@ -1865,11 +1883,50 @@ function debugLog(msg) {
   if (!DEBUG_MODE) return;
   const panel = document.getElementById('debug-panel');
   if (!panel) return;
-  if (!panel.classList.contains('active')) panel.classList.add('active');
+  if (!panel.classList.contains('active')) {
+    panel.classList.add('active');
+    // Add toolbar on first activation
+    if (!panel.querySelector('.debug-toolbar')) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'debug-toolbar';
+      toolbar.innerHTML = `<button onclick="downloadDebugLog()">📥 Download Log</button><button onclick="clearDebugLog()">🗑️ Clear</button><button onclick="document.getElementById('debug-panel').classList.remove('active')">✕ Hide</button>`;
+      panel.insertBefore(toolbar, panel.firstChild);
+    }
+  }
   const row = document.createElement('div');
   row.textContent = typeof msg === 'string' ? msg : JSON.stringify(msg);
   panel.appendChild(row);
   panel.scrollTop = panel.scrollHeight;
+}
+
+function downloadDebugLog() {
+  const panel = document.getElementById('debug-panel');
+  if (!panel) return;
+  const rows = panel.querySelectorAll('div:not(.debug-toolbar)');
+  const lines = [];
+  lines.push('=== SwingIQ Debug Log ===');
+  lines.push(`Date: ${new Date().toISOString()}`);
+  lines.push(`URL: ${location.href}`);
+  lines.push(`UserAgent: ${navigator.userAgent}`);
+  lines.push(`Platform: ${navigator.platform}`);
+  lines.push('========================\n');
+  rows.forEach(r => lines.push(r.textContent));
+  
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `swingiq-debug-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearDebugLog() {
+  const panel = document.getElementById('debug-panel');
+  if (!panel) return;
+  const toolbar = panel.querySelector('.debug-toolbar');
+  panel.innerHTML = '';
+  if (toolbar) panel.appendChild(toolbar);
 }
 
 const PROXY = '/api/proxy';
