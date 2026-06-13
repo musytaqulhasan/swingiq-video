@@ -1661,9 +1661,12 @@ function seekVideoToPhase(posId) {
   if (!vid || !vid.duration) return;
 
   const timestamps = window._phaseTimestamps || {};
+  const frameIndices = window._phaseFrameIndices || {};
+  const allTs = window._allFrameTimestamps || [];
   const targetTime = timestamps[posId];
+  const targetFrame = frameIndices[posId];
 
-  debugLog(`[Seek] ${posId} target=${targetTime?.toFixed(3)}s`);
+  debugLog(`[Seek] ${posId} targetFrame=${targetFrame} targetTime=${targetTime?.toFixed(3)}s`);
 
   document.querySelectorAll('.phase-card').forEach(c => c.classList.remove('active-phase'));
   const card = document.getElementById('phaseCard_' + posId);
@@ -1672,13 +1675,29 @@ function seekVideoToPhase(posId) {
   vid.pause();
   const onSeeked = () => {
     vid.removeEventListener('seeked', onSeeked);
+    
+    // Find which frame index the browser actually landed on
+    const actualTime = vid.currentTime;
+    let actualFrame = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < allTs.length; i++) {
+      const d = Math.abs(allTs[i] - actualTime);
+      if (d < minDiff) { minDiff = d; actualFrame = i; }
+    }
+    
+    const frameDrift = actualFrame - (targetFrame || 0);
+    const timeDiff = targetTime ? (actualTime - targetTime).toFixed(3) : '?';
+    
+    debugLog(`[SeekResult] ${posId} targetFrame=${targetFrame} actualFrame=${actualFrame} drift=${frameDrift} targetTime=${targetTime?.toFixed(3)}s actualTime=${actualTime.toFixed(3)}s timeDiff=${timeDiff}s`);
+    
+    if (Math.abs(frameDrift) > 0) {
+      debugLog(`[WARNING] ${posId} frame drift: expected f${targetFrame} but showing f${actualFrame} (${frameDrift > 0 ? '+' : ''}${frameDrift} frames)`);
+    }
+
     if ('requestVideoFrameCallback' in vid) {
-      vid.requestVideoFrameCallback(() => {
-        debugLog(`[SeekResult] ${posId} requested=${targetTime?.toFixed(3)}s actual=${vid.currentTime.toFixed(3)}s diff=${targetTime ? (vid.currentTime - targetTime).toFixed(3) : '?'}s`);
-      });
+      vid.requestVideoFrameCallback(() => {});
     } else {
       vid.currentTime = vid.currentTime + 0.00001;
-      debugLog(`[SeekResult] ${posId} requested=${targetTime?.toFixed(3)}s actual=${vid.currentTime.toFixed(3)}s (nudge)`);
     }
   };
   vid.addEventListener('seeked', onSeeked);
@@ -1912,11 +1931,25 @@ function downloadDebugLog() {
   lines.push('========================\n');
   rows.forEach(r => lines.push(r.textContent));
   
+  // Detect device + browser for filename
+  const ua = navigator.userAgent;
+  let device = 'unknown';
+  if (/iPhone/.test(ua)) device = 'iphone';
+  else if (/iPad/.test(ua)) device = 'ipad';
+  else if (/Android/.test(ua)) device = 'android';
+  else device = 'laptop';
+  
+  let browser = 'unknown';
+  if (/Edg\//.test(ua)) browser = 'edge';
+  else if (/Chrome\//.test(ua) && !/Edg\//.test(ua)) browser = 'chrome';
+  else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) browser = 'safari';
+  else if (/Firefox\//.test(ua)) browser = 'firefox';
+  
   const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `swingiq-debug-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.txt`;
+  a.download = `swingiq-debug-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}-${device}-${browser}.txt`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2702,10 +2735,14 @@ async function startAnalysis() {
 
     // Store timestamps for video seek
     window._phaseTimestamps = {};
+    window._phaseFrameIndices = {};
+    window._allFrameTimestamps = frames.map(f => f.timestamp);
     positions.forEach(p => {
       window._phaseTimestamps[p.position] = p.timestamp || frames[Math.min(p.frame_index, frames.length-1)].timestamp;
+      window._phaseFrameIndices[p.position] = p.frame_index;
     });
     debugLog(`[Phases] Timestamps: ${JSON.stringify(window._phaseTimestamps)}`);
+    debugLog(`[Phases] FrameIndices: ${JSON.stringify(window._phaseFrameIndices)}`);
 
     // Step 4: Re-extract HQ frames + extract biomechanics
     updateLoadingStep(4);
